@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>인공지능 오목 (렌주룰)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        board: '#DCB35C',
+                        'board-dark': '#B08D46'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { transition: background-color 0.3s, color 0.3s; }
+        canvas { 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); 
+            border-radius: 4px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none; /* 모바일에서 스크롤 방지 */
+        }
+        select, input[type="radio"] { cursor: pointer; }
+    </style>
+</head>
+<!-- justify-center를 justify-start로 변경하고, 하단에 넉넉한 패딩(pb-32)과 상단 패딩(pt-6)을 추가하여 화면을 위로 올림 -->
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 min-h-screen flex flex-col items-center justify-start p-2 sm:p-4 pt-6 sm:pt-8 pb-32">
+
+    <div class="max-w-3xl w-full flex flex-col items-center">
+        <!-- 헤더 및 컨트롤 -->
+        <div class="w-full flex flex-col sm:flex-row justify-between items-center sm:items-end mb-4 gap-4">
+            <div class="text-center sm:text-left">
+                <h1 class="text-3xl font-bold mb-1">인공지능 오목</h1>
+                <p class="text-sm text-gray-600 dark:text-gray-400">렌주룰 (흑: 3-3, 4-4, 장목 금지)</p>
+            </div>
+            
+            <div class="flex flex-wrap justify-center gap-2">
+                <button id="themeToggle" class="p-2 rounded-full bg-white dark:bg-gray-800 shadow hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    <svg id="icon-sun" class="w-5 h-5 hidden dark:block text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="icon-moon" class="w-5 h-5 block dark:hidden text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+                <button id="undoBtn" class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-2 rounded shadow transition font-medium text-sm flex items-center gap-1 disabled:opacity-50">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path></svg>
+                    무르기
+                </button>
+                <button id="resetBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition font-medium text-sm">
+                    새 게임
+                </button>
+            </div>
+        </div>
+
+        <!-- 설정 패널 -->
+        <div class="w-full bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-4 border dark:border-gray-700 flex flex-wrap gap-6 items-center justify-between text-sm sm:text-base">
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-gray-700 dark:text-gray-300">내 돌:</span>
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="playerColor" value="1" checked class="w-4 h-4 text-blue-600"> 흑 (먼저)
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="playerColor" value="2" class="w-4 h-4 text-blue-600"> 백 (나중)
+                </label>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-gray-700 dark:text-gray-300">난이도:</span>
+                <select id="difficultySelect" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white">
+                    <option value="easy">하수 (쉬움)</option>
+                    <option value="normal" selected>중수 (보통)</option>
+                    <option value="hard">고수 (어려움)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 상태 표시줄 -->
+        <div id="status" class="w-full bg-blue-100 dark:bg-blue-900 p-3 rounded-lg shadow mb-4 text-center text-lg font-bold border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 transition-colors">
+            게임을 시작합니다.
+        </div>
+
+        <!-- 오목판 영역: max-w를 500px로 줄이고 아래 마진(mb-12)을 추가하여 위치를 안정적으로 잡아줌 -->
+        <div class="relative w-[96vw] sm:w-full aspect-square max-w-[500px] mb-12">
+            <canvas id="boardCanvas" class="w-full h-full bg-board dark:bg-board-dark"></canvas>
+            
+            <!-- 금수 알림 팝업 -->
+            <div id="toast" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-300 bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl pointer-events-none z-50 font-bold whitespace-nowrap">
+                금수 자리입니다!
+            </div>
+        </div>
+        
+        <!-- 하단 여유 공간을 확실히 확보하기 위한 투명 블록 -->
+        <div class="h-12 w-full"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('boardCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        const resetBtn = document.getElementById('resetBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const themeToggle = document.getElementById('themeToggle');
+        const toastEl = document.getElementById('toast');
+        const colorRadios = document.getElementsByName('playerColor');
+        const diffSelect = document.getElementById('difficultySelect');
+        
+        const BOARD_SIZE = 15;
+        const BLACK = 1;
+        const WHITE = 2;
+        const EMPTY = 0;
+        
+        // 보드 배열을 빈 배열이 아닌 크기에 맞게 미리 초기화합니다 (에러 방지)
+        let board = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(EMPTY));
+        let moveHistory = [];
+        let winningLine = null;
+        
+        let playerColor = BLACK; 
+        let aiColor = WHITE;
+        let difficulty = 'normal'; // 'easy', 'normal', 'hard'
+        
+        let currentPlayer = BLACK;
+        let isGameOver = false;
+        let isAiThinking = false;
+
+        // 캔버스 사이즈 조절 (DPI 고려하여 선명하게)
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            if (rect.width === 0) return; // 요소가 렌더링되지 않았을 때 방어 코드
+            
+            // CSS 크기 강제 고정 (정사각형)
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.width}px`;
+            
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.width * dpr;
+            
+            ctx.scale(dpr, dpr);
+            drawBoard();
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        // 설정 가져오기
+        function updateSettings() {
+            let selectedColor = Array.from(colorRadios).find(r => r.checked).value;
+            playerColor = parseInt(selectedColor);
+            aiColor = playerColor === BLACK ? WHITE : BLACK;
+            difficulty = diffSelect.value;
+        }
+
+        diffSelect.addEventListener('change', () => { difficulty = diffSelect.value; });
+
+        // 초기화
+        function initGame() {
+            updateSettings();
+            board = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(EMPTY));
+            moveHistory = [];
+            winningLine = null;
+            currentPlayer = BLACK;
+            isGameOver = false;
+            isAiThinking = false;
+            
+            updateUndoButton();
+            
+            if (playerColor === BLACK) {
+                updateStatus("당신의 차례입니다. (흑돌)", "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200");
+            } else {
+                updateStatus("AI가 먼저 시작합니다. (흑돌)", "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400");
+            }
+
+            drawBoard();
+
+            // 백을 선택했다면 AI가 먼저 (중앙에 착수)
+            if (aiColor === BLACK) {
+                isAiThinking = true;
+                setTimeout(() => {
+                    placeStone(7, 7, BLACK); // 첫 수는 중앙
+                    currentPlayer = WHITE;
+                    isAiThinking = false;
+                    updateStatus("당신의 차례입니다. (백돌)", "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200");
+                }, 500);
+            }
+        }
+
+        // 상태창 업데이트
+        function updateStatus(text, classes = "") {
+            statusEl.textContent = text;
+            statusEl.className = `w-full p-3 rounded-lg shadow mb-4 text-center text-lg font-bold border transition-colors ${classes}`;
+        }
+
+        // 토스트 팝업 (금수)
+        function showToast(message) {
+            toastEl.textContent = message;
+            toastEl.classList.remove('opacity-0');
+            setTimeout(() => toastEl.classList.add('opacity-0'), 2000);
+        }
+
+        function updateUndoButton() {
+            undoBtn.disabled = moveHistory.length === 0 || isAiThinking || (moveHistory.length === 1 && aiColor === BLACK);
+        }
+
+        // 보드 그리기
+        function drawBoard() {
+            if (!board || board.length === 0) return; // 안전 장치
+
+            // CSS 픽셀 기준 사이즈
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width;
+            const cellSize = width / BOARD_SIZE;
+            const padding = cellSize / 2;
+
+            // 배경 지우기
+            ctx.clearRect(0, 0, width, width);
+
+            // 선 그리기
+            ctx.beginPath();
+            ctx.strokeStyle = document.documentElement.classList.contains('dark') ? '#4B5563' : '#000000';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const pos = padding + i * cellSize;
+                // 가로선
+                ctx.moveTo(padding, pos);
+                ctx.lineTo(width - padding, pos);
+                // 세로선
+                ctx.moveTo(pos, padding);
+                ctx.lineTo(pos, width - padding);
+            }
+            ctx.stroke();
+
+            // 화점 그리기
+            const starPoints = [3, 7, 11];
+            ctx.fillStyle = document.documentElement.classList.contains('dark') ? '#4B5563' : '#000000';
+            for (let i of starPoints) {
+                for (let j of starPoints) {
+                    ctx.beginPath();
+                    ctx.arc(padding + i * cellSize, padding + j * cellSize, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // 놓인 돌 그리기
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r] && board[r][c] !== EMPTY) {
+                        drawStone(r, c, board[r][c], cellSize, padding);
+                    }
+                }
+            }
+
+            // 마지막 수 표시 (작은 빨간 점)
+            if (moveHistory.length > 0) {
+                const lastMove = moveHistory[moveHistory.length - 1];
+                const x = padding + lastMove.c * cellSize;
+                const y = padding + lastMove.r * cellSize;
+                ctx.beginPath();
+                ctx.arc(x, y, cellSize * 0.12, 0, Math.PI * 2);
+                ctx.fillStyle = '#EF4444'; // Red-500
+                ctx.fill();
+            }
+
+            // 승리 선 그리기
+            if (winningLine) {
+                const startX = padding + winningLine[0].c * cellSize;
+                const startY = padding + winningLine[0].r * cellSize;
+                const endX = padding + winningLine[winningLine.length-1].c * cellSize;
+                const endY = padding + winningLine[winningLine.length-1].r * cellSize;
+                
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)'; // Red-500 with opacity
+                ctx.lineWidth = cellSize * 0.2;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+        }
+
+        function drawStone(r, c, player, cellSize, padding) {
+            const x = padding + c * cellSize;
+            const y = padding + r * cellSize;
+            const radius = cellSize * 0.46;
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            
+            // 입체 그라데이션
+            const gradient = ctx.createRadialGradient(x - radius/3, y - radius/3, radius/5, x, y, radius);
+            if (player === BLACK) {
+                gradient.addColorStop(0, '#555');
+                gradient.addColorStop(1, '#050505');
+            } else {
+                gradient.addColorStop(0, '#fff');
+                gradient.addColorStop(1, '#ccc');
+            }
+            
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // 그림자 & 테두리
+            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = player === BLACK ? '#000' : '#888';
+            ctx.stroke();
+        }
+
+        // 정확한 클릭(터치) 위치 잡기
+        canvas.addEventListener('pointerdown', (e) => {
+            if (isGameOver || isAiThinking || currentPlayer !== playerColor) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width;
+            const cellSize = width / BOARD_SIZE;
+            const padding = cellSize / 2;
+            
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 칸(Square)이 아닌 교차점(Intersection) 기준으로 스냅
+            const c = Math.round((x - padding) / cellSize);
+            const r = Math.round((y - padding) / cellSize);
+
+            if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === EMPTY) {
+                
+                // 흑돌일 경우에만 렌주룰 검사
+                if (playerColor === BLACK) {
+                    const forbiddenType = checkRenjuRule(r, c, BLACK);
+                    if (forbiddenType !== "VALID") {
+                        showToast(`금수입니다! (${forbiddenType})`);
+                        return;
+                    }
+                }
+
+                executeMove(r, c, playerColor);
+            }
+        });
+
+        // 돌 놓기 실행 (플레이어 & AI 공통)
+        function executeMove(r, c, player) {
+            placeStone(r, c, player);
+            
+            const winStones = getWinningLine(r, c, player);
+            if (winStones) {
+                winningLine = winStones;
+                drawBoard(); // 선을 그리기 위해 다시 렌더링
+                const winnerText = player === playerColor ? "승리했습니다! 🎉" : "AI가 승리했습니다. 😢";
+                const colorClass = player === playerColor ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300";
+                updateStatus(winnerText, colorClass);
+                isGameOver = true;
+                updateUndoButton();
+                return;
+            }
+
+            // 턴 넘기기
+            currentPlayer = player === BLACK ? WHITE : BLACK;
+            
+            if (currentPlayer === aiColor) {
+                updateStatus("AI가 생각 중입니다...", "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400");
+                isAiThinking = true;
+                updateUndoButton();
+                // 브라우저 렌더링을 위해 약간의 딜레이
+                setTimeout(aiMove, 50);
+            } else {
+                updateStatus("당신의 차례입니다.", "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200");
+                updateUndoButton();
+            }
+        }
+
+        function placeStone(r, c, player) {
+            board[r][c] = player;
+            moveHistory.push({r, c, player});
+            drawBoard();
+        }
+
+        // 무르기 기능
+        undoBtn.addEventListener('click', () => {
+            if (isAiThinking || moveHistory.length === 0) return;
+            
+            // 내가 먼저 둔 경우 최소 2수(내돌, AI돌)가 있어야 무르기 가능
+            if (playerColor === BLACK && moveHistory.length < 2 && !isGameOver) return;
+            // AI가 먼저 둔 경우 최소 2수 있어야 함
+            if (playerColor === WHITE && moveHistory.length < 2) return;
+
+            let popCount = 2; // 기본적으로 내돌, AI돌 2개 뺌
+            if (isGameOver) {
+                // 게임 오버 상태에선 승리자가 누구냐에 따라 1수만 뺄지 2수 뺄지 결정
+                if (moveHistory[moveHistory.length-1].player === playerColor) popCount = 1; // 내가 이겼으면 내 돌만 뺌
+                else popCount = 2; // AI가 이겼으면 내 돌, AI 돌 2개 뺌
+            }
+
+            for(let i=0; i<popCount; i++) {
+                if(moveHistory.length > 0) {
+                    const last = moveHistory.pop();
+                    board[last.r][last.c] = EMPTY;
+                }
+            }
+
+            isGameOver = false;
+            winningLine = null;
+            currentPlayer = playerColor;
+            
+            drawBoard();
+            updateStatus("무르기를 했습니다. 당신의 차례입니다.", "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200");
+            updateUndoButton();
+        });
+
+
+        // 승리 판정 및 승리한 돌 배열 반환
+        function getWinningLine(r, c, player) {
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+            for (let [dr, dc] of directions) {
+                let line = [{r, c}];
+                
+                let nr = r + dr, nc = c + dc;
+                while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) {
+                    line.push({r: nr, c: nc});
+                    nr += dr; nc += dc;
+                }
+                
+                nr = r - dr; nc = c - dc;
+                while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) {
+                    line.unshift({r: nr, c: nc}); // 앞에 추가
+                    nr -= dr; nc -= dc;
+                }
+                
+                if (player === BLACK) {
+                    if (line.length === 5) return line;
+                } else {
+                    if (line.length >= 5) return line; // 백은 장목 허용
+                }
+            }
+            return null;
+        }
+
+
+        // ==========================================
+        // 렌주룰 검사 로직 (흑 전용)
+        // ==========================================
+        function checkRenjuRule(r, c, player) {
+            if (player !== BLACK) return "VALID";
+
+            board[r][c] = player;
+            if (getWinningLine(r, c, player)) {
+                board[r][c] = EMPTY;
+                return "VALID"; // 5목이 최우선
+            }
+
+            let threeCount = 0;
+            let fourCount = 0;
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+
+            for (let [dr, dc] of directions) {
+                // 장목 검사
+                let length = 1;
+                let nr = r + dr, nc = c + dc;
+                while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) { length++; nr += dr; nc += dc; }
+                nr = r - dr; nc = c - dc;
+                while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === player) { length++; nr -= dr; nc -= dc; }
+                
+                if (length > 5) {
+                    board[r][c] = EMPTY;
+                    return "장목 (6목 이상)";
+                }
+
+                let lineStr = getLinePattern(r, c, dr, dc, player);
+                
+                // 4-4 검사 패턴
+                if (lineStr.includes("011110") || lineStr.includes("011112") || lineStr.includes("211110") || 
+                    lineStr.includes("0101110") || lineStr.includes("0110110") || lineStr.includes("0111010") ||
+                    lineStr.includes("2101112") || lineStr.includes("2110112") || lineStr.includes("2111012")) {
+                    fourCount++;
+                }
+
+                // 3-3 검사 패턴
+                if ((lineStr.includes("001110") && !lineStr.includes("201110")) || 
+                    (lineStr.includes("011100") && !lineStr.includes("011102")) || 
+                    lineStr.includes("0011100") ||
+                    lineStr.includes("010110") || 
+                    lineStr.includes("011010")) {
+                    threeCount++;
+                }
+            }
+
+            board[r][c] = EMPTY;
+
+            if (fourCount >= 2) return "4-4";
+            if (threeCount >= 2) return "3-3";
+
+            return "VALID";
+        }
+
+        function getLinePattern(r, c, dr, dc, player) {
+            const opp = player === BLACK ? WHITE : BLACK;
+            let str = "1";
+            let tempStr = "";
+            let nr = r + dr, nc = c + dc;
+            for(let i=0; i<5; i++) {
+                if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) { tempStr += "2"; break; }
+                if (board[nr][nc] === opp) { tempStr += "2"; break; }
+                tempStr += board[nr][nc] === player ? "1" : "0";
+                nr += dr; nc += dc;
+            }
+            str = str + tempStr;
+
+            tempStr = "";
+            nr = r - dr; nc = c - dc;
+            for(let i=0; i<5; i++) {
+                if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) { tempStr = "2" + tempStr; break; }
+                if (board[nr][nc] === opp) { tempStr = "2" + tempStr; break; }
+                tempStr = (board[nr][nc] === player ? "1" : "0") + tempStr;
+                nr -= dr; nc -= dc;
+            }
+            return tempStr + str;
+        }
+
+
+        // ==========================================
+        // 향상된 AI 로직
+        // ==========================================
+        function aiMove() {
+            let bestScore = -Infinity;
+            let bestMoves = [];
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === EMPTY) {
+                        
+                        // AI가 흑일 경우 금수 자리엔 착수하지 않음
+                        if (aiColor === BLACK && checkRenjuRule(r, c, BLACK) !== "VALID") continue;
+
+                        let attackScore = evaluateSpot(r, c, aiColor);
+                        let defenseScore = evaluateSpot(r, c, playerColor);
+                        
+                        let totalScore = 0;
+
+                        if (difficulty === 'hard') {
+                            // 고수: 철저한 방어와 공격, 방어 우선
+                            if (attackScore >= 10000000) totalScore = attackScore; // 내가 바로 이기면 최고
+                            else if (defenseScore >= 10000000) totalScore = defenseScore * 0.9; // 상대가 이기면 막아야함
+                            else totalScore = attackScore + (defenseScore * 1.2); 
+                        } else if (difficulty === 'normal') {
+                            // 중수: 적당한 밸런스, 가끔 작은 위협은 무시 (랜덤 노이즈 추가)
+                            totalScore = attackScore + defenseScore + Math.random() * 50;
+                        } else {
+                            // 하수: 공격 위주, 방어는 치명적인 것만 (높은 랜덤성)
+                            if (defenseScore >= 100000) totalScore = defenseScore;
+                            else totalScore = attackScore + Math.random() * 500;
+                        }
+
+                        // 플레이어가 흑이고 금수 자리라면 방어할 필요 없음
+                        if (playerColor === BLACK && checkRenjuRule(r, c, BLACK) !== "VALID") {
+                            defenseScore = 0; 
+                            totalScore = attackScore;
+                        }
+
+                        if (totalScore > bestScore) {
+                            bestScore = totalScore;
+                            bestMoves = [{r, c}];
+                        } else if (totalScore === bestScore) {
+                            bestMoves.push({r, c});
+                        }
+                    }
+                }
+            }
+
+            let move;
+            if (bestMoves.length > 0) {
+                move = bestMoves[Math.floor(Math.random() * bestMoves.length)];
+            } else {
+                // 비상시 첫 빈칸
+                out: for(let r=0; r<BOARD_SIZE; r++) {
+                    for(let c=0; c<BOARD_SIZE; c++) {
+                        if(board[r][c] === EMPTY) { move = {r, c}; break out; }
+                    }
+                }
+            }
+
+            if (move) {
+                executeMove(move.r, move.c, aiColor);
+            }
+            isAiThinking = false;
+        }
+
+        function evaluateSpot(r, c, player) {
+            board[r][c] = player;
+            let score = 0;
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+
+            for (let [dr, dc] of directions) {
+                let lineStr = getLinePattern(r, c, dr, dc, player);
+                
+                if (lineStr.includes("11111")) score += 10000000; // 승리
+                else if (lineStr.includes("011110")) score += 1000000; // 열린 4
+                else if (lineStr.includes("011112") || lineStr.includes("211110") || 
+                         lineStr.includes("0101110") || lineStr.includes("0110110") || lineStr.includes("0111010")) score += 100000; // 닫힌 4
+                else if (lineStr.includes("0011100") || lineStr.includes("010110") || lineStr.includes("011010")) score += 10000; // 열린 3
+                else if (lineStr.includes("001100") || lineStr.includes("01010")) score += 1000; // 열린 2
+                else if (lineStr.includes("0112") || lineStr.includes("2110")) score += 100; // 닫힌 2
+                else if (lineStr.includes("010")) score += 10; 
+            }
+
+            board[r][c] = EMPTY;
+            return score;
+        }
+
+        // ==========================================
+        // UI 이벤트
+        // ==========================================
+        resetBtn.addEventListener('click', initGame);
+
+        themeToggle.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            drawBoard(); 
+        });
+
+        // 다크모드 초기 감지
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+
+        // 컬러 변경 시 리셋 경고 없이 바로 반영 (초기화)
+        colorRadios.forEach(radio => {
+            radio.addEventListener('change', initGame);
+        });
+
+        // 렌더링 안정성을 위해 약간 대기 후 시작
+        setTimeout(() => {
+            resizeCanvas();
+            initGame();
+        }, 150);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Work Log (작업 일지)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=a98dc9f222bbe3e9c81c9bf44e8e0eba&libraries=services"></script>
+    <style>
+        :root { 
+            --c-ot: #f59e0b; --c-memo: #6366f1; --c-photo: #3b82f6;
+            --bg: #f8fafc; --dark: #1e293b; --sun: #ef4444; --sat: #3b82f6; --primary: #6366f1;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; margin: 0; padding: 0; }
+        
+        html, body {
+            width: 100%; height: 100dvh; 
+            overflow: hidden; background: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        #app-container { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; }
+
+        .header { display: flex; justify-content: space-between; padding: 15px 20px; background: white; border-bottom: 1px solid #e2e8f0; align-items: center; flex-shrink: 0; }
+        .header-title { font-weight: bold; font-size: 1.1rem; color: var(--dark); }
+        
+        .month-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: max-content; gap: 8px; padding: 12px; overflow-y: auto; flex: 1; align-content: start; }
+        .month-card { background: white; padding: 15px 4px; border-radius: 12px; text-align: center; border: 1px solid #e2e8f0; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 6px; }
+        .month-card b { font-size: 1.1rem; color: var(--dark); }
+        .m-stat { font-size: 0.75rem; color: #64748b; line-height: 1.4; text-align: center; }
+
+        .yearly-summary { background: #1e293b; color: white; padding: 12px; font-size: 0.85rem; text-align: center; flex-shrink: 0; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+        .layer { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000; flex-direction: column; }
+        
+        .pop-nav { background: var(--dark); color: white; display: flex; align-items: center; padding: 12px 15px; flex-shrink: 0; justify-content: space-between; }
+        .pop-title { font-weight: bold; font-size: 1.2rem; cursor: pointer; flex: 1; margin-left: 10px; }
+        .pop-nav-stats { display: flex; gap: 12px; font-size: 0.8rem; color: #cbd5e1; align-items: center; }
+        .pop-nav-stats b { color: white; font-size: 0.9rem; margin-left: 4px; }
+
+        .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; flex-shrink: 0; background: white; border-bottom: 1px solid #f1f5f9; }
+        .cal-table td { height: 45px; border: 1px solid #f1f5f9; text-align: center; font-size: 0.8rem; vertical-align: top; padding: 2px; position: relative; cursor: pointer;}
+        .hol-name { display: block; font-size: 0.5rem; color: var(--sun); height: 12px; overflow: hidden; letter-spacing: -0.5px;}
+        .dot-box { display: flex; justify-content: center; gap: 3px; margin-top: 2px; }
+        .dot { width: 5px; height: 5px; border-radius: 50%; }
+        .sun { color: var(--sun); } .sat { color: var(--sat); }
+
+        .list-area { flex: 1; overflow-y: auto; padding: 12px; background: #f1f5f9; padding-bottom: 140px; }
+        .log-card { background: white; padding: 12px 40px 15px 12px; border-radius: 14px; margin-bottom: 10px; position: relative; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-left: 6px solid #ccc; cursor: pointer; }
+        .card-photo { border-left-color: var(--c-photo); } .card-ot { border-left-color: var(--c-ot); } .card-memo { border-left-color: var(--c-memo); }
+        
+        .log-time { position: absolute; bottom: 10px; right: 12px; font-size: 0.65rem; color: #94a3b8; }
+        .btn-del { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; background: #fee2e2; color: #ef4444; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; z-index: 10; }
+        
+        .log-content { font-size: 0.95rem; font-weight: bold; color: #1e293b; margin-bottom: 6px; line-height: 1.4; white-space: pre-wrap;}
+        .log-details { font-size: 0.8rem; color: #64748b; }
+        
+        .log-img-list { display: flex; gap: 6px; margin-top: 8px; overflow-x: auto; padding-bottom: 5px;}
+        .log-img-list img { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1px solid #e2e8f0; cursor: zoom-in; }
+
+        .footer-nav { position: absolute; bottom: 0; left: 0; width: 100%; background: white; border-top: 1px solid #e2e8f0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); z-index: 1010; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .input-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .memo-in { flex: 1; border: 1px solid #cbd5e1; border-radius: 18px; padding: 12px 14px; font-size: 0.95rem; background: #f8fafc; }
+        .icon-btn { font-size: 1.5rem; color: #64748b; cursor: pointer; }
+        .mic-active { color: #ef4444 !important; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+
+        .remove-btn { position: absolute; top: 8px; right: 8px; background: rgba(239,68,68,0.9); color: white; border: 2px solid white; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;}
+
+        #imageViewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; align-items: center; justify-content: center; padding: 0; flex-direction: column; }
+        .close-viewer-btn { position: absolute; top: 20px; right: 20px; color: white; font-size: 2rem; cursor: pointer; background: rgba(0,0,0,0.5); width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 3100;}
+
+        #loadingLayer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.2rem; }
+        .spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: white; animation: spin 1s infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <div id="loadingLayer"><div class="spinner"></div><span id="loadingText">처리 중...</span></div>
+
+    <div class="header">
+        <div class="header-title"><i class="fa-solid fa-book-open" style="color:var(--primary); margin-right:5px;"></i>작업 일지</div>
+        <div style="display:flex; gap:15px; align-items:center;">
+            <i class="fa-solid fa-file-csv" style="color:#10b981; font-size:1.3rem; cursor:pointer;" onclick="exportCSV()" title="엑셀 추출"></i>
+            <span style="color:#e2e8f0;">|</span>
+            <i class="fa-solid fa-cloud-arrow-down" style="color:#3b82f6; font-size:1.3rem; cursor:pointer;" onclick="exportBackupData()" title="백업"></i>
+            <i class="fa-solid fa-cloud-arrow-up" style="color:#f59e0b; font-size:1.3rem; cursor:pointer;" onclick="document.getElementById('importFile').click()" title="복원"></i>
+            <input type="file" id="importFile" hidden accept=".json" onchange="importData(event)">
+            <i class="fa-solid fa-trash-can" style="color:#64748b; font-size:1.3rem; margin-left:5px; cursor:pointer;" onclick="openTrash()"></i>
+        </div>
+    </div>
+    
+    <!-- 달력 영역 -->
+    <div class="month-grid" id="mainGrid"></div>
+
+    <!-- 🌟 gl.html 연결 버튼 (1/3 크기, 좌측 정렬) 🌟 -->
+    <div style="padding: 0 12px 12px 12px; flex-shrink: 0; display: flex; justify-content: flex-start;">
+        <button onclick="location.href='gl.html'" style="width: 33.33%; background: #3b82f6; color: white; padding: 12px 0; border-radius: 10px; border: none; font-weight: bold; font-size: 0.95rem; display: flex; justify-content: center; align-items: center; gap: 6px; cursor: pointer; box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);">
+            <i class="fa-solid fa-car"></i> 운행관리
+        </button>
+    </div>
+
+    <!-- 연간 총계 -->
+    <div class="yearly-summary" id="yearlySummary">[ 연간 총계 ] 🕒 OT 0:00 | 📝 기록 0건</div>
+
+    <div id="popupLayer" class="layer">
+        <div class="pop-nav">
+            <i class="fa-solid fa-chevron-left" style="cursor:pointer; font-size:1.4rem;" onclick="closePop()"></i>
+            <div class="pop-title" id="monthLabel">0월</div>
+            <div class="pop-nav-stats">
+                <span>🕒 OT <b id="popSumOt">0:00</b></span>
+                <span>📝 <b id="popSumMemo">0</b>건</span>
+            </div>
+        </div>
+        
+        <table class="cal-table"><tbody id="calBody"></tbody></table>
+        <div id="logList" class="list-area"></div>
+
+        <div class="footer-nav">
+            <div id="previewArea" style="display:flex; gap:8px; margin-bottom:8px; overflow-x:auto;"></div>
+            <div class="input-row">
+                <i class="fa-solid fa-microphone icon-btn" id="micBtn" onclick="toggleMic()" style="color:var(--c-memo)"></i>
+                <input type="text" id="memoIn" class="memo-in" placeholder="업무 내용 입력..." onfocus="this.select()">
+                <i class="fa-solid fa-paper-plane" style="font-size:1.8rem; color:var(--primary); cursor:pointer;" onclick="saveEntry()"></i>
+            </div>
+            <div class="input-row" style="justify-content: flex-start; gap: 20px;">
+                <i class="fa-solid fa-camera icon-btn" style="color:var(--c-photo)" onclick="document.getElementById('fileIn').click()"></i>
+                <input type="file" id="fileIn" hidden multiple accept="image/*, .heic, .HEIC" onchange="handleFiles(this)">
+                
+                <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+                    <span style="font-size:0.8rem; font-weight:bold; color:#64748b;">연장(OT)</span>
+                    <input type="number" id="otIn" inputmode="decimal" style="width:70px; border:1px solid #cbd5e1; border-radius:10px; text-align:center; padding:8px; font-weight:bold; font-size:0.95rem;" placeholder="시간">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 이미지 뷰어 -->
+    <div id="imageViewer" class="layer">
+        <div class="close-viewer-btn" onclick="closeImageViewer()"><i class="fa-solid fa-xmark"></i></div>
+        <img id="viewerImg" src="" style="max-width: 100%; max-height: 80vh; border-radius: 12px; object-fit: contain;">
+    </div>
+
+    <!-- 휴지통 -->
+    <div id="trashLayer" class="layer">
+        <div class="pop-nav">
+            <i class="fa-solid fa-chevron-left" style="cursor:pointer; font-size:1.4rem;" onclick="closeTrash()"></i>
+            <div class="pop-title">휴지통</div>
+            <i class="fa-solid fa-dumpster-fire" style="font-size:1.5rem; cursor:pointer;" onclick="clearTrash()"></i>
+        </div>
+        <div id="trashList" class="list-area"></div>
+    </div>
+</div>
+
+<script>
+    window.logs = JSON.parse(localStorage.getItem('wm_logs')) || [];
+    window.trash = JSON.parse(localStorage.getItem('wm_trash')) || [];
+    
+    let tempImgs = [];
+    let curMonth = new Date().getMonth() + 1, curDay = new Date().getDate();
+    let isMicOn = false, recognition;
+
+    const holidays = {
+        "20260101": "신정", "20260216": "설날", "20260217": "설날", "20260218": "설날",
+        "20260301": "삼일절", "20260505": "어린이날", "20260524": "부처님오신날", "20260606": "현충일", 
+        "20260815": "광복절", "20260924": "추석", "20260925": "추석", "20260926": "추석", 
+        "20261003": "개천절", "20261009": "한글날", "20261225": "성탄절"
+    };
+
+    window.onload = () => { renderMain(); initSTT(); };
+
+    function saveLocal() {
+        localStorage.setItem('wm_logs', JSON.stringify(window.logs));
+        localStorage.setItem('wm_trash', JSON.stringify(window.trash));
+    }
+
+    function showLoading(msg) { document.getElementById('loadingText').innerText = msg; document.getElementById('loadingLayer').style.display = 'flex'; }
+    function hideLoading() { document.getElementById('loadingLayer').style.display = 'none'; }
+
+    function renderMain() {
+        const grid = document.getElementById('mainGrid');
+        if(!grid) return;
+        grid.innerHTML = "";
+        
+        let yOt = 0, yCount = window.logs.length;
+
+        for(let i=1; i<=12; i++) {
+            let mLogs = window.logs.filter(l => l.m === i);
+            let mOt = mLogs.reduce((s, c) => s + (c.otMins || 0), 0);
+            yOt += mOt;
+            
+            grid.innerHTML += `
+                <div class="month-card" onclick="openPop(${i})">
+                    <b>${i}월</b>
+                    <div class="m-stat">기록 ${mLogs.length}건</div>
+                    <div class="m-stat" style="color:var(--c-ot)">🕒 OT ${Math.floor(mOt/60)}:${(mOt%60).toString().padStart(2,'0')}</div>
+                </div>`;
+        }
+        
+        document.getElementById('yearlySummary').innerText = `[ 연간 총계 ] 🕒 OT ${Math.floor(yOt/60)}:${(yOt%60).toString().padStart(2,'0')} | 📝 기록 ${yCount}건`;
+    }
+
+    window.openPop = (m) => { curMonth = m; document.getElementById('monthLabel').innerText = m + "월"; document.getElementById('popupLayer').style.display = 'flex'; renderCal(2026, m-1); };
+    window.closePop = () => { document.getElementById('popupLayer').style.display = 'none'; renderMain(); };
+    window.setCurDay = (d) => { curDay = d; renderCal(2026, curMonth - 1); };
+
+    function renderCal(year, month) {
+        const body = document.getElementById('calBody'); body.innerHTML = "";
+        let first = new Date(year, month, 1).getDay(), last = new Date(year, month+1, 0).getDate(), html = "<tr>";
+        for(let i=0; i<first; i++) html += "<td></td>";
+        for(let d=1; d<=last; d++) {
+            let ds = `${year}${String(month+1).padStart(2,'0')}${String(d).padStart(2,'0')}`;
+            let dayLogs = window.logs.filter(l => l.m === curMonth && l.d === d);
+            let cls = (new Date(year, month, d).getDay() === 0 || holidays[ds]) ? "sun" : (new Date(year, month, d).getDay() === 6 ? "sat" : "");
+            
+            let hasPhoto = dayLogs.some(l => l.imgs && l.imgs.length > 0);
+            let hasOt = dayLogs.some(l => l.otMins > 0);
+            let hasMemo = dayLogs.some(l => l.memo);
+
+            html += `<td class="${cls}" onclick="setCurDay(${d})" style="${d===curDay?'background:#eff6ff;border:1.5px solid #6366f1;font-weight:bold;':''}">
+                ${d}<span class="hol-name">${holidays[ds]||""}</span>
+                <div class="dot-box">${hasPhoto ? '<div class="dot" style="background:var(--c-photo)"></div>':''}${hasOt ? '<div class="dot" style="background:var(--c-ot)"></div>':''}${hasMemo ? '<div class="dot" style="background:var(--c-memo)"></div>':''}</div></td>`;
+            if((d+first)%7===0) html += "</tr><tr>";
+        }
+        body.innerHTML = html + "</tr>"; updateUI();
+    }
+
+    window.handleFiles = (input) => {
+        Array.from(input.files).forEach(f => {
+            if(f.name.toLowerCase().endsWith('.heic')) {
+                showLoading("변환 중...");
+                heic2any({ blob: f, toType: "image/jpeg" }).then(blob => {
+                    let reader = new FileReader();
+                    reader.onload = e => addTempImg(e.target.result);
+                    reader.readAsDataURL(blob);
+                    hideLoading();
+                });
+            } else {
+                let reader = new FileReader();
+                reader.onload = e => addTempImg(e.target.result);
+                reader.readAsDataURL(f);
+            }
+        });
+        input.value = ""; 
+    };
+
+    function addTempImg(src) {
+        const id = 'img_' + Date.now() + Math.floor(Math.random()*1000);
+        tempImgs.push({id, src});
+        document.getElementById('previewArea').innerHTML += `<div id="pre-${id}" style="position:relative; width:60px; height:60px; flex-shrink:0;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;"><button type="button" onclick="removeTemp('${id}')" class="remove-btn">×</button></div>`;
+    }
+    window.removeTemp = (id) => { tempImgs = tempImgs.filter(i=>i.id !== id); document.getElementById('pre-'+id)?.remove(); };
+
+    window.saveEntry = () => {
+        const memo = document.getElementById('memoIn').value;
+        const otStr = document.getElementById('otIn').value;
+        if(!memo && !otStr && tempImgs.length === 0) return;
+
+        let otMins = 0;
+        if(otStr) otMins = (parseInt(otStr.split('.')[0])||0)*60 + (parseInt(otStr.split('.')[1])||0);
+
+        let cat = tempImgs.length > 0 ? 'photo' : (otMins > 0 ? 'ot' : 'memo');
+        
+        window.logs.push({
+            id: Date.now().toString(), m: curMonth, d: curDay, cat, 
+            memo: memo || "일지 기록", otMins, imgs: [...tempImgs],
+            time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+        });
+        
+        saveLocal();
+        document.getElementById('memoIn').value = ""; document.getElementById('otIn').value = ""; 
+        document.getElementById('previewArea').innerHTML = ""; tempImgs = [];
+        updateUI(); renderMain();
+    };
+
+    function updateUI() {
+        const list = document.getElementById('logList');
+        const dayLogs = window.logs.filter(l => l.m === curMonth && l.d === curDay);
+
+        list.innerHTML = dayLogs.map(l => `
+            <div class="log-card card-${l.cat}">
+                <button type="button" class="btn-del" onclick="deleteEntry('${l.id}')">×</button>
+                <div class="log-content">${l.memo}</div>
+                ${l.otMins ? `<div class="log-details" style="color:var(--c-ot); font-weight:bold;">🕒 OT ${Math.floor(l.otMins/60)}시간 ${(l.otMins%60)}분</div>` : ''}
+                ${l.imgs && l.imgs.length > 0 ? `<div class="log-img-list">${l.imgs.map(i => `<img src="${i.src}" onclick="openImageViewer('${i.src}')">`).join('')}</div>` : ''}
+                <div class="log-time">${l.time}</div>
+            </div>`).join('');
+
+        let mLogs = window.logs.filter(l => l.m === curMonth);
+        let otT = mLogs.reduce((s,c)=>s+(c.otMins||0),0);
+        document.getElementById('popSumOt').innerText = Math.floor(otT/60) + ":" + (otT%60).toString().padStart(2,'0');
+        document.getElementById('popSumMemo').innerText = mLogs.length;
+    }
+
+    window.deleteEntry = (id) => { 
+        const log = window.logs.find(l => l.id === id); 
+        if(log) { window.trash.push(log); window.logs = window.logs.filter(l => l.id !== id); saveLocal(); updateUI(); renderMain(); } 
+    };
+
+    window.openImageViewer = (src) => { document.getElementById('viewerImg').src = src; document.getElementById('imageViewer').style.display = 'flex'; };
+    window.closeImageViewer = () => { document.getElementById('imageViewer').style.display = 'none'; };
+
+    window.openTrash = () => { document.getElementById('trashLayer').style.display = 'flex'; renderTrash(); };
+    window.closeTrash = () => { document.getElementById('trashLayer').style.display = 'none'; renderMain(); };
+    function renderTrash() { 
+        document.getElementById('trashList').innerHTML = window.trash.map(t => `<div class="log-card" style="border-left-color:#94a3b8; opacity:0.8;"><div class="log-content">${t.m}월 ${t.d}일: ${t.memo}</div><button type="button" onclick="restoreLog('${t.id}')" style="margin-top:5px; background:var(--primary); color:white; border:none; padding:8px; border-radius:8px; cursor:pointer; width:100%;">복원</button></div>`).join('') || "<p style='text-align:center; color:#94a3b8; margin-top:50px;'>휴지통이 비어 있습니다.</p>"; 
+    }
+    window.restoreLog = (id) => { const t = window.trash.find(x => x.id === id); if(t) { window.logs.push(t); window.trash = window.trash.filter(x => x.id !== id); saveLocal(); renderTrash(); } };
+    window.clearTrash = () => { if(confirm("비우시겠습니까?")) { window.trash = []; saveLocal(); renderTrash(); } };
+
+    window.exportCSV = () => {
+        let csvContent = "\uFEFF날짜,시간,분류,내용,연장근무(h),사진첨부여부\n";
+        window.logs.forEach(l => {
+            let row = [
+                `"2026-${String(l.m).padStart(2,'0')}-${String(l.d).padStart(2,'0')}"`, `"${l.time}"`, `"${l.cat}"`, `"${(l.memo||'').replace(/"/g, '""')}"`, 
+                `"${l.otMins ? (l.otMins / 60).toFixed(1) : ''}"`, `"${l.imgs && l.imgs.length > 0 ? 'O' : 'X'}"`
+            ];
+            csvContent += row.join(",") + "\n";
+        });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+        link.download = `WorkLog_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link); link.click(); link.remove();
+    };
+    window.exportBackupData = () => {
+        const link = document.createElement('a');
+        link.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ logs: window.logs, trash: window.trash })); 
+        link.download = `WorkLog_Backup_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link); link.click(); link.remove();
+    };
+    window.importData = (e) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => { window.logs = JSON.parse(ev.target.result).logs; saveLocal(); renderMain(); alert("복원 완료"); };
+        reader.readAsText(e.target.files[0]); e.target.value = ""; 
+    };
+
+    function initSTT() {
+        if (!('webkitSpeechRecognition' in window)) return;
+        recognition = new webkitSpeechRecognition(); recognition.lang = 'ko-KR';
+        recognition.onresult = (e) => { document.getElementById('memoIn').value = e.results[0][0].transcript; window.saveEntry(); };
+        recognition.onend = () => { isMicOn = false; document.getElementById('micBtn').classList.remove('mic-active'); };
+    }
+    window.toggleMic = () => { if(isMicOn) recognition.stop(); else { recognition.start(); isMicOn = true; document.getElementById('micBtn').classList.add('mic-active'); } };
+
+    // --- 🌟 Hybrid OS 스와이프 연동 스크립트 🌟 ---
+    let _os_sX = 0, _os_sY = 0, _os_isSwipe = false;
+    document.addEventListener('touchstart', e => { 
+        _os_sX = e.touches[0].clientX; 
+        _os_sY = e.touches[0].clientY; 
+        _os_isSwipe = true;
+    }, {passive: true});
+    document.addEventListener('touchmove', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.touches[0].clientX - _os_sX;
+        let dy = e.touches[0].clientY - _os_sY;
+        if(Math.abs(dy) > Math.abs(dx)) _os_isSwipe = false; 
+    }, {passive: true});
+    document.addEventListener('touchend', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.changedTouches[0].clientX - _os_sX;
+        if (Math.abs(dx) > 50) {
+            window.parent.postMessage({ type: 'os_swipe', dir: dx < 0 ? 'left' : 'right' }, '*');
+        }
+    });
+</script>
+</body>
+</html>

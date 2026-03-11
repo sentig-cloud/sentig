@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AI Assistant v56.0</title>
+    <style>
+        /* 기본적으로 AI 테마의 다크 컬러를 베이스로 사용합니다 */
+        :root { 
+            --bg-card: #0f172a; 
+            --text-main: #f8fafc;
+            --msg-user: #3b82f6; 
+            --msg-ai: #1e293b; 
+            --header-bg: rgba(15, 23, 42, 0.85);
+            --accent: #3b82f6;
+        }
+
+        /* 5가지 AI 테마 클래스 */
+        body.theme-0 { --bg-card: #0f172a; --msg-user: #3b82f6; --msg-ai: #1e293b; --header-bg: rgba(15,23,42,0.85); --accent: #3b82f6; } /* 딥 네이비 */
+        body.theme-1 { --bg-card: #1c192b; --msg-user: #8b5cf6; --msg-ai: #2d2a40; --header-bg: rgba(28,25,43,0.85); --accent: #8b5cf6; } /* 다크 바이올렛 */
+        body.theme-2 { --bg-card: #064e3b; --msg-user: #10b981; --msg-ai: #065f46; --header-bg: rgba(6,78,59,0.85); --accent: #10b981; } /* 다크 에메랄드 */
+        body.theme-3 { --bg-card: #1e1b4b; --msg-user: #6366f1; --msg-ai: #312e81; --header-bg: rgba(30,27,75,0.85); --accent: #6366f1; } /* 딥 인디고 */
+        body.theme-4 { --bg-card: #18181b; --msg-user: #71717a; --msg-ai: #27272a; --header-bg: rgba(24,24,27,0.85); --accent: #a1a1aa; } /* 징크 */
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body, html { 
+            height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            overflow: hidden; background-color: var(--bg-card); color: var(--text-main); 
+            transition: background-color 0.6s ease, color 0.6s ease; /* 색상 전환 애니메이션 */
+        }
+
+        .card-base { display: flex; flex-direction: column; height: 100%; width: 100%; }
+
+        .card-header { 
+            height: 44px; display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 12px; background: var(--header-bg); backdrop-filter: blur(10px);
+            border-bottom: 0.5px solid rgba(255,255,255,0.1); flex-shrink: 0;
+            transition: background-color 0.6s ease;
+        }
+        .header-btn { cursor: pointer; font-size: 24px; color: var(--accent); border: none; background: none; width: 35px; outline: none; transition: color 0.6s ease;}
+        .nav-items { display: flex; gap: 8px; flex-grow: 1; justify-content: center; }
+        .nav-item { font-size: 13px; font-weight: bold; color: rgba(255,255,255,0.5); padding: 4px 10px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; }
+        .nav-item.active { color: #fff; background-color: rgba(255,255,255,0.15); }
+
+        .chat-display { 
+            flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; 
+            gap: 12px; width: 100%; scroll-behavior: smooth; box-sizing: border-box;
+        }
+        .msg { 
+            max-width: 85%; padding: 12px 16px; border-radius: 20px; font-size: 14.5px; 
+            line-height: 1.5; word-wrap: break-word; box-shadow: 0 2px 5px rgba(0,0,0,0.15); 
+            transition: background-color 0.6s ease;
+        }
+        .msg.user { align-self: flex-end; background: var(--msg-user); color: #fff; border-bottom-right-radius: 4px; }
+        .msg.ai { align-self: flex-start; background: var(--msg-ai); color: var(--text-main); border-bottom-left-radius: 4px; border: 1px solid rgba(255,255,255,0.05); }
+
+        .chat-input-area { 
+            display: flex; align-items: center; gap: 10px; padding: 10px 12px; 
+            background: var(--header-bg); border-top: 0.5px solid rgba(255,255,255,0.1); 
+            padding-bottom: calc(10px + env(safe-area-inset-bottom)); flex-shrink: 0; width: 100%;
+            transition: background-color 0.6s ease;
+        }
+        
+        /* 토글 버튼 스타일 (입력창 앞) */
+        .toggle-btn {
+            width: 40px; height: 40px; border-radius: 50%; border: none; flex-shrink: 0;
+            background: rgba(255,255,255,0.1); color: #fff;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .toggle-btn.active { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        .toggle-btn svg { width: 20px; height: 20px; fill: currentColor; }
+
+        #ai-input { 
+            flex: 1; min-width: 0; height: 42px; border: 1px solid rgba(255,255,255,0.2); 
+            border-radius: 21px; padding: 0 16px; outline: none; font-size: 15px; 
+            background: rgba(0,0,0,0.2); color: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+            transition: border-color 0.3s ease;
+        }
+        #ai-input::placeholder { color: rgba(255,255,255,0.5); }
+        #ai-input:focus { border-color: var(--accent); }
+
+        /* 마이크 버튼 스타일 (입력창 뒤) */
+        .mic-btn {
+            width: 40px; height: 40px; background: var(--accent); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            border: none; flex-shrink: 0; transition: all 0.3s ease;
+        }
+        .mic-btn.active { background: #ff3b30; transform: scale(1.1); animation: blink 1.5s infinite; box-shadow: 0 0 10px #ff3b30; }
+        .mic-btn svg { width: 22px; height: 22px; fill: white; }
+
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+    </style>
+</head>
+<body class="theme-0">
+    <div class="card-base">
+        <div class="card-header" id="ai-header"></div>
+        <div class="chat-display" id="chat-display"></div>
+        <div class="chat-input-area">
+            
+            <!-- 연속 대화 모드 토글 버튼 (입력창 앞) -->
+            <button id="mode-btn" class="toggle-btn" onclick="toggleAutoMode()" title="연속 대화 모드 켜기/끄기">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                </svg>
+            </button>
+            
+            <input type="text" id="ai-input" placeholder="말하거나 입력 후 엔터..." onkeypress="if(event.keyCode==13) sendAiMsg()">
+            
+            <!-- 마이크 버튼 (입력창 뒤) -->
+            <button id="mic-btn" class="mic-btn" onclick="toggleVoice()">
+                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            </button>
+
+        </div>
+    </div>
+
+    <script>
+        // API 키 설정 (보안상 환경에 따라 자동 주입되거나 발급받은 키를 여기에 입력합니다)
+        const apiKey = ""; 
+
+        // [데이터 처리 방침]
+        // 사용자의 대화 데이터는 브라우저 외부의 서버로 전송/저장되지 않으며, 
+        // 오직 브라우저 로컬(localStorage)에만 임시 저장됩니다. 삭제 시 지체 없이 파기됩니다.
+        let chats = JSON.parse(localStorage.getItem('geminiChatSessions_v4')) || [{ msgs: [{ role: 'ai', text: '반갑습니다! 무엇을 도와드릴까요?' }] }];
+        let cIdx = 0;
+        
+        let isAutoMode = false;
+        let isRecording = false;
+
+        const display = document.getElementById('chat-display');
+        const input = document.getElementById('ai-input');
+        const micBtn = document.getElementById('mic-btn');
+        const modeBtn = document.getElementById('mode-btn');
+
+        // STT (음성 인식) 초기화
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let rec;
+        if (SpeechRec) {
+            rec = new SpeechRec(); 
+            rec.lang = 'ko-KR';
+            rec.onresult = (e) => { 
+                input.value = e.results[0][0].transcript; 
+                stopMic(); 
+                sendAiMsg(); 
+            };
+            rec.onend = () => stopMic();
+            rec.onerror = () => stopMic();
+        }
+
+        // --- 기능: 연속 대화 모드 토글 ---
+        function toggleAutoMode() {
+            isAutoMode = !isAutoMode;
+            modeBtn.classList.toggle('active', isAutoMode);
+            if(isAutoMode) {
+                if(!isRecording) toggleVoice();
+            } else {
+                window.speechSynthesis.cancel(); // 끄면 현재 읽고 있던 음성 중지
+            }
+        }
+
+        // --- 기능: 음성 인식 (STT) ---
+        function toggleVoice() { 
+            if(!rec) return alert("이 브라우저에서는 마이크 기능이 지원되지 않습니다."); 
+            
+            window.speechSynthesis.cancel(); // 마이크를 켜면 AI 음성 출력 중단
+
+            if(isRecording) {
+                stopMic();
+            } else {
+                micBtn.classList.add('active'); 
+                rec.start(); 
+                isRecording = true;
+            }
+        }
+
+        function stopMic() { 
+            micBtn.classList.remove('active'); 
+            if(rec && isRecording) {
+                try { rec.stop(); } catch(e){}
+            }
+            isRecording = false; 
+        }
+
+        // --- 기능: AI 음성 출력 (TTS) ---
+        function speakText(text) {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel(); // 이전 음성 취소
+
+            // 마크다운 기호(*, #, ` 등)를 제거하여 자연스럽게 읽도록 정제
+            const cleanText = text.replace(/[*#`_]/g, '').trim();
+            if(!cleanText) return;
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.lang = 'ko-KR';
+            utterance.rate = 1.05; // 읽는 속도 살짝 조절
+            
+            utterance.onend = () => {
+                // 연속 대화 모드일 경우, AI가 말을 마치면 자동으로 마이크 켬
+                if (isAutoMode) {
+                    setTimeout(() => { if(!isRecording) toggleVoice(); }, 400);
+                }
+            };
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // --- 기능: UI 렌더링 및 테마 동적 변경 ---
+        function renderChats() {
+            // 탭 인덱스(cIdx)에 따라 동적으로 body의 테마 클래스를 변경합니다 (5가지 색상 순환)
+            document.body.className = `theme-${cIdx % 5}`;
+
+            const header = document.getElementById('ai-header');
+            header.innerHTML = `
+                <button class="header-btn" onclick="addChat()" style="visibility:${chats.length < 5 ? 'visible' : 'hidden'}">+</button>
+                <div class="nav-items">
+                    ${chats.map((_, i) => `<span class="nav-item ${i === cIdx ? 'active' : ''}" onclick="changeChat(${i})">${i+1}</span>`).join('')}
+                </div>
+                <button class="header-btn" onclick="removeChat()" style="visibility:${chats.length > 0 ? 'visible' : 'hidden'}">&minus;</button>
+            `;
+            display.innerHTML = chats[cIdx].msgs.map(m => `<div class="msg ${m.role}">${m.text}</div>`).join('');
+            display.scrollTop = display.scrollHeight;
+        }
+
+        function changeChat(idx) { 
+            cIdx = idx; 
+            window.speechSynthesis.cancel(); // 탭 이동 시 음성 즉시 중단
+            renderChats(); 
+        }
+        
+        function addChat() { 
+            if(chats.length < 5) { 
+                chats.push({ msgs: [{ role: 'ai', text: '새 대화입니다. 무엇을 도와드릴까요?' }] }); 
+                cIdx = chats.length - 1; 
+                saveAndRender(); 
+                speakText(chats[cIdx].msgs[0].text);
+            } 
+        }
+
+        // --- 기능: 대화 삭제 시 데이터 지체 없이 파기 ---
+        function removeChat() { 
+            if(chats.length > 1) { 
+                chats.splice(cIdx, 1); 
+                cIdx = Math.max(0, cIdx - 1); 
+            } else {
+                // 마지막 1개 남은 대화를 지울 때 완전 초기화
+                chats = [{ msgs: [{ role: 'ai', text: '모든 대화가 삭제되었습니다.' }] }];
+                cIdx = 0;
+            }
+            
+            // 삭제 직후 로컬 스토리지 데이터 즉시 덮어쓰기 (파기)
+            localStorage.setItem('geminiChatSessions_v4', JSON.stringify(chats)); 
+            window.speechSynthesis.cancel();
+            renderChats(); 
+        }
+
+        async function sendAiMsg() {
+            const text = input.value.trim();
+            if(!text) return;
+
+            window.speechSynthesis.cancel(); // 타이핑/말하기 시작하면 기존 AI 음성 중지
+
+            chats[cIdx].msgs.push({ role: 'user', text: text });
+            input.value = '';
+            renderChats();
+
+            const loadingIdx = chats[cIdx].msgs.length;
+            chats[cIdx].msgs.push({ role: 'ai', text: '...' });
+            renderChats();
+
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: text }] }] })
+                });
+
+                const data = await response.json();
+                
+                let replyText = "";
+                if (response.status === 429) {
+                    replyText = "질문이 너무 많습니다. 30초만 기다려 주세요.";
+                } else if (data.error) {
+                    replyText = "오류: " + data.error.message;
+                } else if (data.candidates && data.candidates.length > 0) {
+                    replyText = data.candidates[0].content.parts[0].text;
+                } else {
+                    replyText = "응답을 받을 수 없습니다.";
+                }
+                
+                chats[cIdx].msgs[loadingIdx].text = replyText;
+                saveAndRender();
+                speakText(replyText); // 응답이 오면 TTS로 읽어주기 실행
+
+            } catch (error) {
+                chats[cIdx].msgs[loadingIdx].text = "네트워크 연결이 불안정합니다.";
+                saveAndRender();
+            }
+        }
+
+        function saveAndRender() { 
+            localStorage.setItem('geminiChatSessions_v4', JSON.stringify(chats)); 
+            renderChats(); 
+        }
+        
+        // 초기 렌더링
+        renderChats();
+    // --- Hybrid OS 스와이프 연동 스크립트 ---
+    let _os_sX = 0, _os_sY = 0, _os_isSwipe = false;
+    
+    document.addEventListener('touchstart', e => { 
+        _os_sX = e.touches[0].clientX; 
+        _os_sY = e.touches[0].clientY; 
+        _os_isSwipe = true;
+    }, {passive: true});
+    
+    document.addEventListener('touchmove', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.touches[0].clientX - _os_sX;
+        let dy = e.touches[0].clientY - _os_sY;
+        // 위아래로 스크롤하는 움직임이 더 크면 스와이프(페이지 넘김) 취소
+        if(Math.abs(dy) > Math.abs(dx)) _os_isSwipe = false; 
+    }, {passive: true});
+    
+    document.addEventListener('touchend', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.changedTouches[0].clientX - _os_sX;
+        // 좌우로 50px 이상 쓸어 넘겼을 때 OS로 방향 신호 전송
+        if (Math.abs(dx) > 50) {
+            window.parent.postMessage({ type: 'os_swipe', dir: dx < 0 ? 'left' : 'right' }, '*');
+        }
+    });
+    </script>
+</body>
+</html>

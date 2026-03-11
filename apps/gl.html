@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>운행 일지 달력 (Win95 Edition)</title>
+    
+    <!-- Win95 UI Library -->
+    <link rel="stylesheet" href="https://unpkg.com/98.css">
+    
+    <!-- Tailwind CSS (Preflight 비활성화) -->
+    <script>
+        tailwind.config = { corePlugins: { preflight: false } }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <style>
+        body { 
+            background-color: #008080; 
+            font-family: 'Pixelated MS Sans Serif', Arial, sans-serif;
+            margin: 0; padding: 0; overflow: hidden;
+        }
+
+        .hidden { display: none !important; }
+        
+        /* 메인 앱 창 일체화 */
+        #app-container {
+            width: 100vw; height: 100vh;
+            display: flex; flex-direction: column;
+            border: none; box-shadow: none;
+        }
+        
+        #modal-overlay {
+            background: rgba(0, 0, 0, 0.5);
+            position: fixed; inset: 0; z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* 캘린더 그리드 6줄 고정으로 한화면 맞춤 */
+        #month-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            grid-template-rows: repeat(6, minmax(0, 1fr)); 
+            height: 100%;
+        }
+
+        .day-cell { 
+            height: auto; min-height: 0;
+            display: flex; flex-direction: column; justify-content: flex-start; align-items: center; 
+            padding: 2px !important; 
+            overflow: hidden; 
+        }
+
+        .badge { 
+            font-size: 9px; padding: 1px 2px; background: #000080; color: white; 
+            margin-top: 1px; width: 100%; text-align: center; 
+            overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.2;
+        }
+        .badge-red { background: #800000; }
+        .badge-green { background: #008000; }
+        .badge-purple { background: #800080; }
+        .badge-holiday { background: transparent; color: #800000; font-weight: bold; padding: 0; }
+        
+        .btn-pressed {
+            box-shadow: inset -1px -1px #fff, inset 1px 1px #0a0a0a, inset -2px -2px #dfdfdf, inset 2px 2px #808080 !important;
+            background: #dfdfdf !important;
+            outline: 1px dotted #000;
+            outline-offset: -4px;
+        }
+
+        .fast-mode-active {
+            border: 2px dashed #000080 !important;
+            background-color: #e6e6fa !important;
+        }
+
+        .oncall-highlight {
+            background-color: #ffe4e1 !important;
+            border: 2px solid #800000 !important;
+        }
+
+        /* 사진 영역 컨테이너 (높이 축소) */
+        .img-box {
+            border: 2px dashed #808080;
+            background-color: #fff;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            overflow: hidden;
+        }
+        .img-box:hover { background-color: #f0f0f0; }
+
+        .btn-oncall {
+            background-color: #800000; 
+            color: white;
+            border: 2px solid #dfdfdf;
+            border-bottom-color: #0a0a0a;
+            border-right-color: #0a0a0a;
+            outline: 1px solid #000;
+        }
+        .btn-oncall.active {
+            background-color: #b30000;
+            border: 2px solid #0a0a0a;
+            border-bottom-color: #dfdfdf;
+            border-right-color: #dfdfdf;
+            box-shadow: inset 2px 2px 4px rgba(0,0,0,0.5);
+            color: #ffffaa;
+        }
+        
+        /* 모달 내 섹션 분리 스타일 (패딩, 마진 최소화) */
+        .section-box {
+            background-color: #dfdfdf;
+            border-top: 2px solid #fff;
+            border-left: 2px solid #fff;
+            border-right: 2px solid #808080;
+            border-bottom: 2px solid #808080;
+            padding: 4px 6px;
+            margin-bottom: 6px;
+        }
+        .section-title {
+            font-weight: bold;
+            font-size: 11px;
+            color: #000080;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #808080;
+            padding-bottom: 2px;
+        }
+    </style>
+</head>
+<body class="text-black">
+
+    <div class="window" id="app-container">
+        <!-- 타이틀 바 -->
+        <div class="title-bar shrink-0">
+            <div class="title-bar-text"><i class="fa-solid fa-car-side mr-1"></i> <span id="header-title">2026 운행 일지</span></div>
+            <div class="title-bar-controls">
+                <button aria-label="Minimize"></button>
+                <button aria-label="Maximize"></button>
+                <button aria-label="Close"></button>
+            </div>
+        </div>
+
+        <!-- 메뉴 바 -->
+        <div class="flex gap-2 border-b border-gray-400 pb-1 px-2 pt-1 bg-[#c0c0c0] shrink-0">
+            <button id="btn-back" class="hidden px-2">◁ 뒤로</button>
+            <button id="btn-export-csv" class="px-2 font-bold ml-auto" title="CSV 내보내기">💾 내보내기</button>
+        </div>
+
+        <div class="window-body m-0 flex-1 flex flex-col overflow-hidden bg-[#c0c0c0] p-2">
+            
+            <!-- 연간 뷰 -->
+            <div id="view-year" class="flex-1 overflow-y-auto">
+                <fieldset class="h-full border-gray-400">
+                    <legend>월간 요약 선택</legend>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 pb-4" id="year-grid"></div>
+                </fieldset>
+            </div>
+
+            <!-- 월간 상세 뷰 -->
+            <div id="view-month" class="hidden flex-1 flex flex-col overflow-hidden">
+                <fieldset class="mb-2 shrink-0 border-gray-400">
+                    <legend>월별 집계 및 빠른 지정</legend>
+                    
+                    <div class="flex flex-wrap gap-2 text-xs font-bold bg-white border border-gray-500 p-1 mb-1.5" id="month-summary">
+                        <span class="text-[#000080]">거리: 0km</span> | 
+                        <span class="text-[#800000]">주유: 0원</span> | 
+                        <span>추가: 0시간</span> | 
+                        <span>당직: 0일</span> | 
+                        <span>연/반차: 0일</span>
+                    </div>
+
+                    <div class="flex gap-1 overflow-x-auto pb-1 items-center">
+                        <button class="fast-btn px-3 py-1 text-xs font-bold" data-type="vacation">연차</button>
+                        <button class="fast-btn px-3 py-1 text-xs font-bold" data-type="half" id="btn-half-main">반차</button>
+                        
+                        <div id="half-sub-menu" class="hidden flex gap-1 bg-gray-300 p-0.5 rounded border border-gray-500 shadow-inner">
+                            <button class="fast-btn px-2 py-1 text-[11px] font-bold text-purple-700" data-type="half_am">오전</button>
+                            <button class="fast-btn px-2 py-1 text-[11px] font-bold text-purple-700" data-type="half_pm">오후</button>
+                        </div>
+
+                        <button class="fast-btn px-3 py-1 text-xs ml-auto text-[#800000] font-bold" data-type="normal">취소</button>
+                    </div>
+                </fieldset>
+
+                <!-- 달력 영역 -->
+                <div class="sunken-panel flex-1 bg-white flex flex-col overflow-hidden" id="calendar-panel">
+                    <div class="grid grid-cols-7 gap-1 text-center font-bold text-xs border-b pb-1 mb-1 bg-[#dfdfdf] shrink-0 p-1">
+                        <div style="color: red;">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: blue;">토</div>
+                    </div>
+                    <div class="p-1 flex-1" id="month-grid"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-bar shrink-0">
+            <p class="status-bar-field" id="status-text">Ready.</p>
+        </div>
+    </div>
+
+    <!-- 일일 기록 모달 -->
+    <div id="modal-overlay" class="hidden">
+        <div class="window flex flex-col" style="width: 360px; max-width: 95vw; max-height: 98vh;">
+            <div class="title-bar shrink-0">
+                <div class="title-bar-text" id="modal-title">상세 기록</div>
+                <div class="title-bar-controls">
+                    <button aria-label="Close" id="btn-close-modal-top"></button>
+                </div>
+            </div>
+            
+            <div class="window-body px-2 pb-2 flex-1 overflow-y-auto mt-1 bg-[#c0c0c0]">
+                
+                <!-- 1. 운행 기록 섹션 -->
+                <div class="section-box">
+                    <div class="section-title"><i class="fa-solid fa-gauge-high mr-1"></i>출/퇴근 기록 (계기판)</div>
+                    <div class="grid grid-cols-2 gap-2 mb-1">
+                        <!-- 출근 -->
+                        <div class="flex flex-col gap-1 relative">
+                            <div class="bg-[#000080] text-white text-center text-[10px] font-bold py-0.5">출근 (Start)</div>
+                            <!-- 높이를 줄인 사진 영역 -->
+                            <div class="img-box h-12 w-full" id="container-start" title="클릭하여 카메라 촬영">
+                                <img id="preview-start" class="hidden absolute inset-0 w-full h-full object-cover z-10">
+                                <div id="placeholder-start" class="flex items-center justify-center gap-1 text-gray-500 text-[10px] z-0">
+                                    <i class="fa-solid fa-camera"></i> 촬영(OCR)
+                                </div>
+                                <input type="file" id="input-cam-start" accept="image/*" capture="environment" class="hidden">
+                                <button type="button" id="btn-del-start" class="hidden absolute top-0 right-0 z-20 bg-red-600 text-white w-5 h-5 flex items-center justify-center text-xs opacity-80 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            
+                            <!-- 수기 입력 (onfocus시 자동선택) -->
+                            <div class="flex gap-1 items-center">
+                                <input type="number" id="val-start" class="w-full text-right text-[11px] p-0.5" placeholder="수기(km)" onfocus="this.select()" oninput="calcDistance()" onkeydown="if(event.key==='Enter') this.blur();">
+                                <button class="px-1.5 py-0.5 text-[10px]" id="btn-alb-start" title="앨범">🖼</button>
+                                <input type="file" id="input-alb-start" accept="image/*" class="hidden">
+                            </div>
+                        </div>
+                        
+                        <!-- 퇴근 -->
+                        <div class="flex flex-col gap-1 relative">
+                            <div class="bg-[#800000] text-white text-center text-[10px] font-bold py-0.5">퇴근 (End)</div>
+                            <div class="img-box h-12 w-full" id="container-end" title="클릭하여 카메라 촬영">
+                                <img id="preview-end" class="hidden absolute inset-0 w-full h-full object-cover z-10">
+                                <div id="placeholder-end" class="flex items-center justify-center gap-1 text-gray-500 text-[10px] z-0">
+                                    <i class="fa-solid fa-camera"></i> 촬영(OCR)
+                                </div>
+                                <input type="file" id="input-cam-end" accept="image/*" capture="environment" class="hidden">
+                                <button type="button" id="btn-del-end" class="hidden absolute top-0 right-0 z-20 bg-red-600 text-white w-5 h-5 flex items-center justify-center text-xs opacity-80 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            
+                            <!-- 수기 입력 (onfocus시 자동선택) -->
+                            <div class="flex gap-1 items-center">
+                                <input type="number" id="val-end" class="w-full text-right text-[11px] p-0.5" placeholder="수기(km)" onfocus="this.select()" oninput="calcDistance()" onkeydown="if(event.key==='Enter') this.blur();">
+                                <button class="px-1.5 py-0.5 text-[10px]" id="btn-alb-end" title="앨범">🖼</button>
+                                <input type="file" id="input-alb-end" accept="image/*" class="hidden">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="sunken-panel p-1 text-center bg-white flex justify-between items-center">
+                        <span class="text-[10px] font-bold">일착산 (거리):</span>
+                        <div class="bg-black text-lime-400 font-bold px-2 border" style="border-color: #808080 #fff #fff #808080; border-width: 2px; border-style: solid;">
+                            <span id="calc-dist-val">0</span> km
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 주유 기록 섹션 -->
+                <div class="section-box">
+                    <div class="section-title"><i class="fa-solid fa-gas-pump mr-1"></i>주유 정보</div>
+                    <div class="flex gap-1 mb-1.5">
+                        <button class="flex-1 font-bold text-[10px] px-0" onclick="addGas(10000)">+1만</button>
+                        <button class="flex-1 font-bold text-[10px] px-0" onclick="addGas(30000)">+3만</button>
+                        <button class="flex-1 font-bold text-[10px] px-0" onclick="addGas(50000)">+5만</button>
+                        <button class="flex-1 font-bold text-[10px] px-0 text-red-600" onclick="addGas(0, true)">지우기</button>
+                    </div>
+                    
+                    <div class="flex items-center gap-1 mb-1.5">
+                        <label class="w-8 text-[11px] font-bold">합계:</label>
+                        <input type="text" id="val-gas-price" class="flex-1 text-right pr-1 font-bold text-blue-800 text-[11px]" placeholder="0" onfocus="this.select()" oninput="formatGasPrice(this)" onkeydown="if(event.key==='Enter') this.blur();">
+                        <span class="text-[11px] w-4">원</span>
+                        
+                        <label class="w-4 text-[11px] text-right">량:</label>
+                        <input type="number" id="val-gas-liter" class="w-10 text-right pr-1 text-[11px]" placeholder="0" onfocus="this.select()" onkeydown="if(event.key==='Enter') this.blur();">
+                        <span class="text-[11px] w-2">L</span>
+                    </div>
+
+                    <div class="flex items-center gap-1">
+                        <label class="w-8 text-[11px] font-bold">메모:</label>
+                        <input type="text" id="val-gas-memo" class="flex-1 text-[11px] p-0.5" placeholder="주유소명 등" onfocus="this.select()" onkeydown="if(event.key==='Enter') this.blur();">
+                    </div>
+                </div>
+
+                <!-- 3. 추가근무 (특근) 섹션 -->
+                <div class="section-box">
+                    <div class="section-title"><i class="fa-solid fa-clock mr-1"></i>추가 근무 (특근)</div>
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex gap-1">
+                            <button class="flex-1 font-bold text-[10px] px-0" onclick="addOvertime(0.5)">+30분</button>
+                            <button class="flex-1 font-bold text-[10px] px-0" onclick="addOvertime(1)">+1시간</button>
+                            <button class="flex-1 font-bold text-[10px] px-0" onclick="addOvertime(2)">+2시간</button>
+                            <button class="flex-1 font-bold text-[10px] px-0 text-red-600" onclick="addOvertime(0, true)">지우기</button>
+                        </div>
+                        
+                        <div class="flex items-center gap-1">
+                            <label class="w-12 text-[11px] font-bold text-[#000080]">총 시간:</label>
+                            <input type="number" id="val-overtime-hours" step="0.5" class="flex-1 text-right font-bold text-[11px] p-0.5" placeholder="0" onfocus="this.select()" onkeydown="if(event.key==='Enter') this.blur();">
+                            <span class="text-[11px] w-6">시간</span>
+                        </div>
+                        
+                        <div class="flex gap-2 items-start relative">
+                            <div class="img-box h-10 w-10 shrink-0" id="container-overtime" title="카메라 촬영">
+                                <img id="preview-overtime" class="hidden absolute inset-0 w-full h-full object-cover z-10">
+                                <div id="placeholder-overtime" class="text-center text-gray-500 text-[8px] z-0">
+                                    <i class="fa-solid fa-camera"></i>
+                                </div>
+                                <input type="file" id="input-cam-overtime" accept="image/*" capture="environment" class="hidden">
+                                <button type="button" id="btn-del-overtime" class="hidden absolute top-0 right-0 z-20 bg-red-600 text-white w-3 h-3 flex items-center justify-center text-[8px]"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            
+                            <div class="flex-1 flex flex-col gap-1 justify-center">
+                                <div class="flex gap-1 items-center">
+                                    <button class="px-2 py-0.5 text-[10px]" id="btn-alb-overtime" type="button">🖼 앨범 첨부</button>
+                                    <input type="file" id="input-alb-overtime" accept="image/*" class="hidden">
+                                </div>
+                                <input type="text" id="val-overtime-memo" class="w-full text-[11px] p-0.5" placeholder="특이사항 및 사유 기재" onfocus="this.select()" onkeydown="if(event.key==='Enter') this.blur();">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. 당직 강조 버튼 -->
+                <div class="mt-1">
+                    <button type="button" id="btn-oncall-toggle" class="btn-oncall w-full py-1.5 text-sm font-bold tracking-widest shadow-md">
+                        <i class="fa-solid fa-moon mr-1"></i> 당직 (OFF)
+                    </button>
+                </div>
+
+                <!-- 하단 버튼 영역 (오류 수정됨) -->
+                <div class="flex justify-between mt-2 pt-2 border-t border-gray-400">
+                    <button id="btn-reset-modal" style="width: 60px; height: 26px; color: #800000; font-size: 11px;">초기화</button>
+                    <div class="flex gap-1.5">
+                        <button id="btn-save-daily" style="font-weight: bold; width: 70px; height: 26px; font-size: 11px;">저장</button>
+                        <button id="btn-cancel-modal" style="width: 70px; height: 26px; font-size: 11px;">닫기</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩 인디케이터 창 -->
+    <div id="loading-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center">
+        <div class="window" style="width: 200px;">
+            <div class="title-bar"><div class="title-bar-text">Processing...</div></div>
+            <div class="window-body text-center p-4">
+                <i class="fa-solid fa-hourglass-half fa-spin text-2xl mb-2"></i>
+                <p class="text-xs mt-2 font-bold text-[#000080]" id="loading-text">숫자 추출 중...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const holidays2026 = {
+            '01-01': '신정', '02-16': '설연휴', '02-17': '설날', '02-18': '설연휴',
+            '03-01': '삼일절', '05-05': '어린이날', '05-24': '부처님',
+            '06-06': '현충일', '08-15': '광복절', '09-24': '추석연휴',
+            '09-25': '추석', '09-26': '추석연휴', '10-03': '개천절',
+            '10-09': '한글날', '12-25': '성탄절'
+        };
+
+        const leaveTypeProps = {
+            'vacation': { label: '연차', class: 'badge-red' },
+            'half_am': { label: '오전반차', class: 'badge-purple' },
+            'half_pm': { label: '오후반차', class: 'badge-purple' }
+        };
+
+        const currentYear = new Date().getFullYear(); 
+        let currentMonth = new Date().getMonth() + 1;
+        let selectedDateStr = null; 
+        
+        let appData = {}; 
+        let activeFastMode = null; 
+        let isOncallActive = false; 
+
+        const viewYear = document.getElementById('view-year');
+        const viewMonth = document.getElementById('view-month');
+        const headerTitle = document.getElementById('header-title');
+        const btnBack = document.getElementById('btn-back');
+        const statusText = document.getElementById('status-text');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const monthGridContainer = document.getElementById('month-grid');
+        const calendarPanel = document.getElementById('calendar-panel');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('header-title').textContent = `${currentYear} 운행 일지`;
+            
+            appData[`${currentYear}-03-05`] = { startKm: 1000, endKm: 1050, overtimeHours: 2, overtimeMemo: "야간장비점검", isSaved: true };
+            appData[`${currentYear}-03-10`] = { gasPrice: 30000, oncall: true, isSaved: true };
+            appData[`${currentYear}-03-15`] = { status: 'vacation', isSaved: true };
+
+            renderYearView();
+            
+            // 사진 업로드(OCR) 및 앨범 세팅
+            setupPhotoUpload('start', true);
+            setupPhotoUpload('end', true);
+            setupPhotoUpload('overtime', false); // 특근은 단순 사진저장(OCR 끔)
+
+            // 버튼 이벤트 연결 (기존 오류 제거됨)
+            btnBack.addEventListener('click', goBackToYearView);
+            document.getElementById('btn-close-modal-top').addEventListener('click', closeDailyModal);
+            document.getElementById('btn-cancel-modal').addEventListener('click', closeDailyModal);
+            document.getElementById('btn-save-daily').addEventListener('click', saveDailyRecord);
+            document.getElementById('btn-export-csv').addEventListener('click', exportDataToCSV);
+            document.getElementById('btn-reset-modal').addEventListener('click', () => {
+                if(confirm("모든 입력 내용을 비우시겠습니까?")) resetDailyForm();
+            });
+
+            document.querySelectorAll('.fast-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => toggleFastMode(e.target));
+            });
+
+            document.getElementById('btn-oncall-toggle').addEventListener('click', toggleOncallButton);
+        });
+
+        function getMonthSummary(year, month) {
+            let dist = 0, gas = 0, overtimeHours = 0, oncall = 0, vacation = 0;
+            const prefix = `${year}-${String(month).padStart(2, '0')}`;
+            
+            for (let date in appData) {
+                if (date.startsWith(prefix)) {
+                    const rec = appData[date];
+                    const start = parseFloat(rec.startKm) || 0;
+                    const end = parseFloat(rec.endKm) || 0;
+                    if (end > start) dist += (end - start);
+                    
+                    gas += parseFloat(rec.gasPrice) || 0;
+                    overtimeHours += parseFloat(rec.overtimeHours) || 0;
+                    if (rec.oncall) oncall++;
+                    
+                    if (rec.status === 'vacation') vacation++;
+                    if (rec.status === 'half_am' || rec.status === 'half_pm') vacation += 0.5;
+                }
+            }
+            return { dist, gas, overtimeHours, oncall, vacation };
+        }
+
+        function toggleFastMode(clickedBtn) {
+            const type = clickedBtn.dataset.type;
+            const isCurrentlyActive = clickedBtn.classList.contains('btn-pressed');
+            const subMenu = document.getElementById('half-sub-menu');
+            const mainHalfBtn = document.getElementById('btn-half-main');
+
+            document.querySelectorAll('.fast-btn').forEach(b => b.classList.remove('btn-pressed'));
+            
+            if (isCurrentlyActive && type !== 'half') {
+                activeFastMode = null;
+                calendarPanel.classList.remove('fast-mode-active');
+                subMenu.classList.add('hidden');
+                mainHalfBtn.classList.remove('hidden'); 
+                statusText.textContent = "Ready.";
+            } else {
+                if (type === 'half') {
+                    mainHalfBtn.classList.add('hidden');
+                    subMenu.classList.remove('hidden');
+                    activeFastMode = null;
+                    calendarPanel.classList.remove('fast-mode-active');
+                    statusText.textContent = "오전/오후 반차를 선택하세요.";
+                } else {
+                    clickedBtn.classList.add('btn-pressed');
+                    activeFastMode = type;
+                    calendarPanel.classList.add('fast-mode-active');
+                    
+                    if(type !== 'half_am' && type !== 'half_pm') {
+                        subMenu.classList.add('hidden');
+                        mainHalfBtn.classList.remove('hidden');
+                    }
+
+                    if(type === 'normal') {
+                        statusText.textContent = `[취소] 지정 모드: 달력을 누르면 연/반차, 당직이 취소됩니다.`;
+                    } else {
+                        statusText.textContent = `[${clickedBtn.textContent}] 지정 모드: 달력을 클릭하세요.`;
+                    }
+                }
+            }
+        }
+
+        function calcDistance() {
+            const start = parseFloat(document.getElementById('val-start').value) || 0;
+            const end = parseFloat(document.getElementById('val-end').value) || 0;
+            let dist = end - start;
+            
+            const distEl = document.getElementById('calc-dist-val');
+            if(dist < 0 || isNaN(dist)) {
+                distEl.textContent = "0";
+                distEl.style.color = "red";
+            } else {
+                distEl.textContent = dist;
+                distEl.style.color = "lime";
+            }
+        }
+
+        function formatGasPrice(input) {
+            let val = String(input.value).replace(/,/g, '').replace(/[^0-9]/g, '');
+            input.value = val !== '' ? Number(val).toLocaleString('ko-KR') : '';
+        }
+
+        function addGas(amount, reset = false) {
+            const input = document.getElementById('val-gas-price');
+            if (reset) {
+                input.value = '';
+            } else {
+                let current = Number(input.value.replace(/,/g, '')) || 0;
+                input.value = (current + amount).toLocaleString('ko-KR');
+            }
+        }
+
+        function addOvertime(hours, reset = false) {
+            const input = document.getElementById('val-overtime-hours');
+            if (reset) {
+                input.value = '';
+            } else {
+                let current = parseFloat(input.value) || 0;
+                input.value = current + hours;
+            }
+        }
+
+        function toggleOncallButton() {
+            isOncallActive = !isOncallActive;
+            const btn = document.getElementById('btn-oncall-toggle');
+            if(isOncallActive) {
+                btn.classList.add('active');
+                btn.innerHTML = `<i class="fa-solid fa-moon mr-1 text-yellow-300"></i> 당직 (ON)`;
+            } else {
+                btn.classList.remove('active');
+                btn.innerHTML = `<i class="fa-solid fa-moon mr-1"></i> 당직 (OFF)`;
+            }
+        }
+
+        function renderYearView() {
+            const yearGrid = document.getElementById('year-grid');
+            yearGrid.innerHTML = '';
+            
+            for (let i = 1; i <= 12; i++) {
+                const summary = getMonthSummary(currentYear, i);
+                const btn = document.createElement('button');
+                btn.className = "p-2 flex flex-col items-center justify-center bg-[#dfdfdf] hover:bg-[#c0c0c0]";
+                btn.style.height = "80px";
+                btn.onclick = () => openMonthView(i);
+                
+                let summaryHtml = '';
+                if(summary.dist > 0 || summary.gas > 0 || summary.overtimeHours > 0 || summary.oncall > 0) {
+                    summaryHtml = `<div class="text-[9px] mt-1 text-left w-full pl-2">
+                        <div class="text-[#000080]">km: ${summary.dist}</div>
+                        <div class="text-[#800000]">₩: ${summary.gas.toLocaleString()}</div>
+                    </div>`;
+                }
+                btn.innerHTML = `<span class="font-bold text-lg">${i}월</span>${summaryHtml}`;
+                yearGrid.appendChild(btn);
+            }
+        }
+
+        function openMonthView(month) {
+            currentMonth = month;
+            document.getElementById('header-title').textContent = `${currentYear}년 ${month}월`;
+            btnBack.classList.remove('hidden');
+            viewYear.classList.add('hidden');
+            viewMonth.classList.remove('hidden');
+            
+            if (activeFastMode) toggleFastMode(document.querySelector(`[data-type="${activeFastMode}"]`));
+
+            renderMonthDays(currentYear, currentMonth);
+        }
+
+        function goBackToYearView() {
+            document.getElementById('header-title').textContent = `${currentYear} 운행 일지`;
+            btnBack.classList.add('hidden');
+            viewMonth.classList.add('hidden');
+            viewYear.classList.remove('hidden');
+            renderYearView();
+        }
+
+        function renderMonthDays(year, month) {
+            const sum = getMonthSummary(year, month);
+            document.getElementById('month-summary').innerHTML = `
+                <span class="text-[#000080]">거리: ${sum.dist}km</span> | 
+                <span class="text-[#800000]">주유: ${sum.gas.toLocaleString()}원</span> | 
+                <span>추가: ${sum.overtimeHours}시간</span> | 
+                <span>당직: ${sum.oncall}일</span> | 
+                <span>휴무: ${sum.vacation}일</span>
+            `;
+
+            monthGridContainer.innerHTML = '';
+            const firstDay = new Date(year, month - 1, 1).getDay(); 
+            const daysInMonth = new Date(year, month, 0).getDate(); 
+            const totalCells = 42; 
+
+            for (let i = 0; i < totalCells; i++) {
+                const cell = document.createElement('button');
+                
+                if (i >= firstDay && i < firstDay + daysInMonth) {
+                    const day = i - firstDay + 1;
+                    const monthStr = String(month).padStart(2, '0');
+                    const dayStr = String(day).padStart(2, '0');
+                    const dateStr = `${year}-${monthStr}-${dayStr}`;
+                    const mdStr = `${monthStr}-${dayStr}`; 
+                    
+                    const isSunday = (i % 7 === 0);
+                    const isSaturday = (i % 7 === 6);
+                    const isHoliday = holidays2026[mdStr] !== undefined;
+
+                    cell.className = "day-cell bg-[#dfdfdf] hover:bg-white";
+                    
+                    const rec = appData[dateStr];
+                    if (rec && rec.oncall) {
+                        cell.classList.add('oncall-highlight');
+                    }
+
+                    cell.onclick = () => {
+                        if (activeFastMode) applyFastMode(dateStr);
+                        else openDailyModal(year, month, day, dateStr);
+                    };
+
+                    let textColor = 'black';
+                    if (isSunday || isHoliday) textColor = 'red';
+                    else if (isSaturday) textColor = 'blue';
+
+                    let html = `<span style="font-weight:bold; color: ${textColor}; margin-top: 2px;">${day}</span>`;
+                    let badges = '';
+                    
+                    if (isHoliday) {
+                        badges += `<div class="badge badge-holiday">${holidays2026[mdStr]}</div>`;
+                    }
+
+                    if (rec) {
+                        if (rec.status && rec.status !== 'normal') {
+                            const prop = leaveTypeProps[rec.status];
+                            badges += `<div class="badge ${prop.class}">${prop.label}</div>`;
+                        }
+                        if (parseFloat(rec.overtimeHours) > 0) {
+                            badges += `<div class="badge text-[#000080] bg-[#e6e6fa] border border-[#000080]">추가(${rec.overtimeHours}h)</div>`;
+                        }
+                        if(rec.startKm && rec.endKm) {
+                            badges += `<div class="badge bg-transparent !text-black border-t border-gray-400">🚗${Math.max(0, rec.endKm - rec.startKm)}</div>`;
+                        }
+                        if(badges === '' && rec.isSaved) {
+                            badges += `<div class="badge badge-green">✔</div>`;
+                        }
+                    }
+                    html += `<div class="w-full mt-auto flex flex-col gap-[1px] mb-1">${badges}</div>`;
+                    cell.innerHTML = html;
+
+                } else {
+                    cell.className = "day-cell bg-[#d0d0d0] border-none shadow-none cursor-default";
+                    cell.disabled = true;
+                }
+
+                monthGridContainer.appendChild(cell);
+            }
+        }
+
+        function applyFastMode(dateStr) {
+            if (!appData[dateStr]) appData[dateStr] = { isSaved: true, status: 'normal', oncall: false };
+
+            if (activeFastMode === 'normal') {
+                appData[dateStr].status = 'normal';
+                appData[dateStr].oncall = false;
+            } else {
+                appData[dateStr].status = activeFastMode;
+            }
+            
+            renderMonthDays(currentYear, currentMonth);
+            statusText.textContent = `${dateStr} 업데이트 완료`;
+        }
+
+        function resetDailyForm() {
+            const idsToClear = ['val-start', 'val-end', 'val-gas-price', 'val-gas-liter', 'val-gas-memo', 'val-overtime-hours', 'val-overtime-memo'];
+            idsToClear.forEach(id => document.getElementById(id).value = '');
+            
+            ['start', 'end', 'overtime'].forEach(type => {
+                const btnDel = document.getElementById(`btn-del-${type}`);
+                if (btnDel) btnDel.click(); 
+            });
+
+            isOncallActive = false;
+            document.getElementById('btn-oncall-toggle').classList.remove('active');
+            document.getElementById('btn-oncall-toggle').innerHTML = `<i class="fa-solid fa-moon mr-1"></i> 당직 (OFF)`;
+
+            calcDistance();
+        }
+
+        function openDailyModal(year, month, day, dateStr) {
+            selectedDateStr = dateStr;
+            document.getElementById('modal-title').textContent = `${month}월 ${day}일 상세 기록`;
+            
+            resetDailyForm();
+
+            const rec = appData[dateStr];
+            if(rec) {
+                if(rec.startKm) document.getElementById('val-start').value = rec.startKm;
+                if(rec.endKm) document.getElementById('val-end').value = rec.endKm;
+                if(rec.gasPrice) document.getElementById('val-gas-price').value = Number(rec.gasPrice).toLocaleString('ko-KR');
+                if(rec.gasLiter) document.getElementById('val-gas-liter').value = rec.gasLiter;
+                if(rec.gasMemo) document.getElementById('val-gas-memo').value = rec.gasMemo;
+                if(rec.overtimeHours) document.getElementById('val-overtime-hours').value = rec.overtimeHours;
+                if(rec.overtimeMemo) document.getElementById('val-overtime-memo').value = rec.overtimeMemo;
+                
+                if(rec.oncall) toggleOncallButton(); 
+                
+                calcDistance();
+            }
+
+            modalOverlay.classList.remove('hidden');
+        }
+
+        function closeDailyModal() {
+            modalOverlay.classList.add('hidden');
+        }
+
+        function saveDailyRecord() {
+            const startKm = document.getElementById('val-start').value;
+            const endKm = document.getElementById('val-end').value;
+            const gasPriceStr = document.getElementById('val-gas-price').value.replace(/,/g, '');
+            const gasLiter = document.getElementById('val-gas-liter').value;
+            const gasMemo = document.getElementById('val-gas-memo').value;
+            const overtimeHours = document.getElementById('val-overtime-hours').value;
+            const overtimeMemo = document.getElementById('val-overtime-memo').value;
+            
+            let currentStatus = 'normal';
+            if(appData[selectedDateStr] && appData[selectedDateStr].status) {
+                currentStatus = appData[selectedDateStr].status;
+            }
+
+            appData[selectedDateStr] = {
+                startKm: startKm,
+                endKm: endKm,
+                gasPrice: gasPriceStr,
+                gasLiter: gasLiter,
+                gasMemo: gasMemo,
+                overtimeHours: overtimeHours,
+                overtimeMemo: overtimeMemo,
+                oncall: isOncallActive,
+                status: currentStatus,
+                isSaved: true
+            };
+
+            statusText.textContent = `${selectedDateStr} 저장 완료.`;
+            closeDailyModal();
+            renderMonthDays(currentYear, currentMonth);
+        }
+
+        function exportDataToCSV() {
+            if (Object.keys(appData).length === 0) {
+                alert("내보낼 데이터가 없습니다.");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+            csvContent += "날짜,출근(km),퇴근(km),일착산(km),주유금액(원),주유량(L),주유메모,추가근무(시간),추가근무내용,당직,상태\n";
+
+            const sortedDates = Object.keys(appData).sort();
+            sortedDates.forEach(date => {
+                const rec = appData[date];
+                const start = parseFloat(rec.startKm) || 0;
+                const end = parseFloat(rec.endKm) || 0;
+                const dist = (end > start) ? (end - start) : 0;
+                
+                const overtimeHours = rec.overtimeHours || '';
+                const overtimeMemo = rec.overtimeMemo || '';
+                const oncall = rec.oncall ? 'O' : 'X';
+                const statusStr = leaveTypeProps[rec.status] ? leaveTypeProps[rec.status].label : '정상';
+
+                const cleanGasMemo = `"${rec.gasMemo || ''}"`;
+                const cleanOverMemo = `"${overtimeMemo}"`;
+
+                csvContent += `${date},${start},${end},${dist},${rec.gasPrice || ''},${rec.gasLiter || ''},${cleanGasMemo},${overtimeHours},${cleanOverMemo},${oncall},${statusStr}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `운행일지_및_근태_${currentYear}년.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function setupPhotoUpload(type, useOCR) {
+            const containerCam = document.getElementById(`container-${type}`);
+            const inputCam = document.getElementById(`input-cam-${type}`);
+            const btnAlb = document.getElementById(`btn-alb-${type}`);
+            const inputAlb = document.getElementById(`input-alb-${type}`);
+            
+            const preview = document.getElementById(`preview-${type}`);
+            const placeholder = document.getElementById(`placeholder-${type}`);
+            
+            const valInput = document.getElementById(`val-${type}`);
+            const btnDel = document.getElementById(`btn-del-${type}`);
+
+            containerCam.addEventListener('click', () => inputCam.click());
+            btnAlb.addEventListener('click', () => inputAlb.click());
+
+            const processFile = function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        preview.src = event.target.result;
+                        preview.classList.remove('hidden');
+                        placeholder.classList.add('hidden');
+                        if (btnDel) btnDel.classList.remove('hidden');
+
+                        if(useOCR) runOCR(event.target.result, valInput);
+                    }
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            inputCam.addEventListener('change', processFile);
+            inputAlb.addEventListener('change', processFile);
+
+            if (btnDel) {
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation(); 
+                    preview.src = '';
+                    preview.classList.add('hidden');
+                    placeholder.classList.remove('hidden');
+                    btnDel.classList.add('hidden');
+                    inputCam.value = '';
+                    inputAlb.value = '';
+                    if (useOCR && valInput) valInput.value = ''; 
+                    calcDistance();
+                });
+            }
+        }
+
+        async function runOCR(imageSrc, targetInput) {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.classList.remove('hidden');
+            
+            try {
+                const result = await Tesseract.recognize(imageSrc, 'eng');
+                const text = result.data.text;
+                let finalNumber = "";
+
+                // 1. km(또는 k) 앞의 숫자 먼저 찾기
+                const kmMatch = text.match(/([0-9][0-9,\.\s]*)\s*k/i);
+                if (kmMatch) {
+                    finalNumber = kmMatch[1].replace(/[^0-9]/g, '');
+                } else {
+                    // 2. 없으면 사진 내에서 가장 긴 숫자 추출 (보통 총 주행거리)
+                    const nums = text.match(/\d+/g);
+                    if (nums && nums.length > 0) {
+                        finalNumber = nums.reduce((a, b) => a.length > b.length ? a : b);
+                    }
+                }
+                
+                if (finalNumber.length > 0) {
+                    targetInput.value = finalNumber;
+                    calcDistance();
+                    statusText.textContent = "OCR 완료. 필요시 수기칸을 터치하여 수정하세요.";
+                } else {
+                    alert("숫자 인식 실패. 직접 수기칸에 입력해주세요.");
+                }
+            } catch (error) {
+                alert("처리 중 오류 발생.");
+                console.error(error);
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
