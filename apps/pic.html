@@ -150,38 +150,50 @@
     };
 
 geocoder.coord2Address(lng, lat, function(result, status) {
-                                if (status === kakao.maps.services.Status.OK) {
-                                    let address = "";
-                                    const doc = result[0];
-                                    
-                                    if (val === 'gps_old') {
-                                        // 1. 구주소(지번) 가져오기
-                                        if (doc.address) {
-                                            address = doc.address.address_name;
-                                        } else {
-                                            address = "지번 주소 정보 없음";
-                                        }
-                                    } else {
-                                        // 2. 신주소(도로명) 가져오기
-                                        if (doc.road_address) {
-                                            // 도로명 정보가 있으면 도로명 주소 사용
-                                            address = doc.road_address.address_name;
-                                        } else if (doc.address) {
-                                            // 도로명이 없는 지역이면 지번 주소라도 대신 보여주기
-                                            address = doc.address.address_name + " (지번)";
-                                        } else {
-                                            address = "주소 정보 없음";
-                                        }
-                                    }
-                                    
-                                    // 화면에 글자 찍어주기
-                                    config.locationText = address;
-                                    displayLocation.innerText = address;
-                                    saveConfig();
-                                } else {
-                                    alert("카카오 서버 응답 오류입니다.");
-                                }
-                            });
+    if (status === kakao.maps.services.Status.OK) {
+        let address = "";
+        const doc = result[0];
+        
+        if (val === 'gps_old') {
+            // 1. 구주소(지번) 추출: 주소명 + 번지수 강제 결합
+            if (doc.address) {
+                let mainNo = doc.address.main_address_no;
+                let subNo = doc.address.sub_address_no;
+                address = doc.address.address_name;
+                
+                // 주소 이름에 숫자가 포함 안 되어 있다면 강제로 붙임
+                if (mainNo && !address.includes(mainNo)) {
+                    address += " " + mainNo + (subNo ? "-" + subNo : "");
+                }
+            } else {
+                address = "지번 정보 없음";
+            }
+        } else {
+            // 2. 신주소(도로명) 추출: 도로명 + 건물번호 강제 결합
+            if (doc.road_address) {
+                address = doc.road_address.address_name;
+                let mainNo = doc.road_address.main_building_no;
+                let subNo = doc.road_address.sub_building_no;
+                
+                // 도로명에 건물번호가 없다면 강제로 붙임
+                if (mainNo && !address.includes(mainNo)) {
+                    address += " " + mainNo + (subNo ? "-" + subNo : "");
+                }
+            } else if (doc.address) {
+                address = doc.address.address_name + " (지번대체)";
+            } else {
+                address = "주소 정보 없음";
+            }
+        }
+        
+        config.locationText = address;
+        displayLocation.innerText = address;
+        saveConfig();
+    } else {
+        alert("카카오 서버에서 데이터를 받지 못했습니다.");
+    }
+});
+
     
     function initBrowserStatus() {
         const ua = navigator.userAgent;
@@ -256,4 +268,5 @@ geocoder.coord2Address(lng, lat, function(result, status) {
                                             address = doc.address.address_name;
                                         } else {
                                             address = "해당 위치의 지번 주소 없음";
+
 
