@@ -96,7 +96,6 @@
 
         #flash-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:100; transition: opacity 0.1s; }
     </style>
-    <!-- 카카오 지도 JavaScript API (libraries=services 포함) -->
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=95e50bf045aa4dda112398b1ca38d9c0&libraries=services"></script>
 </head>
 <body onclick="checkStart()">
@@ -571,11 +570,8 @@
     };
 </script>
 
-<!-- 1. 파이어베이스 라이브러리 (필수) -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=a98dc9f222bbe3e9c81c9bf44e8e0eba&libraries=services"></script>
-<!-- 2. 동기화 및 스와이프 로직 -->
 <script>
     // =========================================================
     // 1. 실시간 데이터 동기화 세팅 (파이어베이스)
@@ -655,10 +651,8 @@
         }
     });
 
-    alert(window.location.origin);
+    // 💡 수정한 부분: 맨 밑에 있던 테스트용 알림창을 지웠습니다!
 
 </script>
 </body>
-
 </html>
-
