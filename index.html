@@ -368,14 +368,14 @@
     // 아래 defaultApps 배열 안에 한 줄씩 추가하시면 시스템 기본 앱으로 등록됩니다!
     // =========================================================================
     const defaultApps = [
-        { file: 'sticker.html', name: '메모장', icon: 'fas fa-sticky-note' },
-        { file: 'pic.html', name: '카메라', icon: 'fas fa-camera' },
-        { file: 'ai.html', name: 'AI 채팅', icon: 'fas fa-robot' },
-        { file: 'link.html', name: '즐겨찾기', icon: 'fas fa-link' },
-        { file: 'work.html', name: '워크 다이어리', icon: 'fas fa-briefcase' },
-        { file: 'omok.html', name: '오목게임', icon: 'fas fa-gamepad' } 
+        { file: 'apps/sticker.html', name: '메모장', icon: 'fas fa-sticky-note' },
+        { file: 'apps/pic.html', name: '카메라', icon: 'fas fa-camera' },
+        { file: 'apps/ai.html', name: 'AI 채팅', icon: 'fas fa-robot' },
+        { file: 'apps/link.html', name: '즐겨찾기', icon: 'fas fa-link' },
+        { file: 'apps/work.html', name: '워크 다이어리', icon: 'fas fa-briefcase' },
+        { file: 'apps/omok.html', name: '오목게임', icon: 'fas fa-gamepad' } 
     ];
-
+    
     // --- 1. Firebase Init & Data State ---
     const db = firebase.initializeApp({
         apiKey: "AIzaSyCM-XlgUaZxIzuAVUJSb3LEVGwWM1GPlkw",
@@ -1763,4 +1763,5 @@
 </body>
 
 </html>
+
 
