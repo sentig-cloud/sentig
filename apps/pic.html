@@ -1,2 +1,658 @@
-ㅇ
-ㅇ
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tag Camera Pro Max</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root { --bg: #000; --panel: #1a1a1a; --accent: #00a2ff; --on-chrome: #ff0000; --on-web: #007bff; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: white; font-family: 'Pretendard', -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+
+        /* 상단 패널: 누르기 편한 위치와 간격 최적화 */
+        .top-panel { height: 60px; background: var(--panel); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid #333; z-index: 100; }
+        .tool-group { display: flex; align-items: center; width: 100%; justify-content: space-between; }
+        
+        .tool-row { display: flex; align-items: center; gap: 10px; border-right: 1px solid #444; padding-right: 10px; }
+        .palette-row { display: flex; gap: 8px; padding-left: 5px; }
+        
+        .tool-btn { background: none; border: none; color: #aaa; font-size: 18px; font-weight: 900; cursor: pointer; transition: 0.2s; padding: 5px; font-family: sans-serif; }
+        .tool-btn:active { color: #fff; transform: scale(0.9); }
+        
+        /* 선 굵기 선택창 */
+        .line-width-select {
+            background: #222; border: 1px solid #555; color: #fff; border-radius: 6px; 
+            padding: 5px; font-size: 13px; outline: none; cursor: pointer;
+        }
+
+        .dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; cursor: pointer; transition: 0.2s; }
+        .dot.selected { transform: scale(1.3); border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+        .status-indicator { 
+            font-size: 10px; font-weight: 900; padding: 4px 8px; border-radius: 15px; 
+            border: 1px solid rgba(255,255,255,0.2); letter-spacing: 0.5px; cursor: pointer; 
+            text-align: center; min-width: 42px; transition: 0.3s;
+        }
+        .status-indicator.chrome { background: var(--on-chrome); color: white; box-shadow: 0 0 10px var(--on-chrome); animation: blink 2s infinite; }
+        .status-indicator.web { background: var(--on-web); color: white; border-color: #55aaff; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        /* 중앙 촬영 영역 */
+        .frame-container { flex: 1; position: relative; padding: 10px 15px; background: #000; display: flex; flex-direction: column; }
+        .camera-frame { position: relative; flex: 1; border: 2px solid #333; border-radius: 16px; overflow: hidden; background: #111; box-shadow: inset 0 0 20px #000; }
+        #video, #external-img, #canvas, #tag-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #external-img { display: none; z-index: 3; }
+        #canvas { z-index: 5; touch-action: none; pointer-events: auto; }
+        
+        #tag-layer { 
+            z-index: 10; pointer-events: none; display: flex; flex-direction: column; 
+            align-items: flex-end; padding: 25px; box-sizing: border-box; 
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.5); 
+            gap: 8px;
+        }
+        
+        /* 모든 텍스트의 크기를 동일하게 통일 (em 사용) */
+        #display-location { order: 1; font-size: 1em; font-weight: bold; opacity: 0.95; }
+        #display-time { order: 2; font-size: 1em; font-weight: bold; font-family: monospace; opacity: 0.95; }
+        #display-text { order: 3; font-size: 1em; font-weight: bold; }
+        
+        #tag-layer.pos-bottom #display-text { order: 1; }
+        #tag-layer.pos-bottom #display-time { order: 2; }
+        #tag-layer.pos-bottom #display-location { order: 3; }
+
+        .tag-input-area { background: var(--panel); padding: 12px 15px; display: flex; gap: 10px; border-top: 1px solid #333; }
+        #tag-input { flex: 1; background: #222; border: 1px solid #555; color: white; padding: 10px 15px; border-radius: 10px; outline: none; font-size: 15px; transition: border-color 0.2s;}
+        #tag-input:focus { border-color: var(--accent); }
+        .clear-btn { background: #444; border: none; color: white; padding: 0 15px; border-radius: 10px; cursor: pointer; transition: 0.2s; font-weight: bold;}
+        .clear-btn:active { background: #666; transform: scale(0.95);}
+
+        /* 하단 메인 컨트롤 */
+        .bottom-panel { height: 165px; background: var(--panel); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-top: 1px solid #333; z-index: 100; }
+        .side-group, .shutter-btn, .joystick { flex-shrink: 0; }
+        .side-group { display: flex; flex-direction: column; align-items: center; gap: 15px; width: 115px; }
+
+        .loc-btn { 
+            width: 50px; height: 50px; background: #222; border: 2px solid #555; border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 20px; 
+            position: relative; overflow: hidden; transition: 0.2s; box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+        }
+        .loc-btn:active { transform: scale(0.9); background: #333; color: #fff; }
+        #location-select { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+        .mini-shutter { width: 50px; height: 50px; background: #fff; border: 4px solid #555; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #333; font-size: 18px; cursor: pointer; transition: 0.1s; box-shadow: 0 3px 8px rgba(0,0,0,0.4);}
+        .mini-shutter:active { transform: scale(0.9); background: #eee; }
+        #file-input { display: none; }
+
+        /* 셔터 */
+        .shutter-btn { width: 85px; height: 85px; background: white; border-radius: 50%; border: 7px solid #444; outline: none; transition: 0.1s; box-shadow: 0 5px 20px rgba(0,0,0,0.5); cursor: pointer;}
+        .shutter-btn:active { transform: scale(0.85); background: #bbb; }
+
+        /* 조이스틱 */
+        .joystick { display: grid; grid-template-areas: ". up ." "left mid right" ". down ."; gap: 10px; align-items: center; justify-items: center; width: 115px; }
+        .joy-btn { background: #333; border: 1px solid #555; color: white; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 3px 0 #111; font-size: 14px; transition: 0.1s; }
+        .joy-btn:active { transform: translateY(2px); box-shadow: none; }
+        .joy-mid { grid-area: mid; width: 40px; height: 40px; border-radius: 50%; background: #444; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; font-size: 18px; }
+        .joy-mid.active { background: var(--accent); color: white; border: 2px solid white; box-shadow: 0 0 12px var(--accent); }
+
+        #flash-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:100; transition: opacity 0.1s; }
+    </style>
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=a98dc9f222bbe3e9c81c9bf44e8e0eba&libraries=services"></script>
+    <body onclick="checkStart()">
+
+    <div class="top-panel">
+        <div class="tool-group">
+            <div class="tool-row">
+                <div id="browser-status" class="status-indicator web" onclick="setSaveFolder()">WEB</div>
+                <button class="tool-btn" onclick="undo()" title="1획 지우기">1</button>
+                <button class="tool-btn" onclick="clearDraw()" title="모두 지우기">A</button>
+                
+                <select id="line-width" class="line-width-select" onchange="changeLineWidth()">
+                    <option value="3">얇게</option>
+                    <option value="6">보통</option>
+                    <option value="14">굵게</option>
+                </select>
+            </div>
+
+            <div class="palette-row">
+                <div class="dot" style="background:red" onclick="setGlobalColor('red', this)"></div>
+                <div class="dot" style="background:green" onclick="setGlobalColor('green', this)"></div>
+                <div class="dot" style="background:blue" onclick="setGlobalColor('blue', this)"></div>
+                <div class="dot" style="background:black" onclick="setGlobalColor('black', this)"></div>
+                <div class="dot" style="background:white" onclick="setGlobalColor('white', this)"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="frame-container">
+        <div class="camera-frame">
+            <video id="video" autoplay playsinline muted></video>
+            <img id="external-img">
+            <canvas id="canvas"></canvas>
+            <div id="tag-layer" class="pos-top">
+                <div id="display-location"></div>
+                <div id="display-time"></div>
+                <div id="display-text"></div>
+            </div>
+            <div id="flash-overlay"></div>
+        </div>
+    </div>
+
+    <div class="tag-input-area">
+        <input type="text" id="tag-input" placeholder="태그 내용을 입력하세요..." oninput="updateTagText()" autocomplete="off" spellcheck="false">
+        <button class="clear-btn" onclick="clearTagInput()">지우기</button>
+    </div>
+
+    <div class="bottom-panel">
+        <div class="side-group">
+            <div class="loc-btn" title="주소 설정">
+                <i class="fas fa-map-marker-alt"></i>
+                <select id="location-select" onchange="changeLocation()">
+                    <option value="">주소 없음</option>
+                    <option value="gps_new">GPS 신주소(도로명)</option>
+                    <option value="gps_old">GPS 구주소(지번)</option>
+                </select>
+            </div>
+            
+            <label for="file-input" class="mini-shutter" title="사진 불러오기">
+                <i class="fas fa-images"></i>
+            </label>
+            <input type="file" id="file-input" accept="image/*" onchange="loadExternalImg(this)">
+        </div>
+
+        <button class="shutter-btn" onclick="takeFinalPhoto()"></button>
+
+        <div class="joystick">
+            <div class="joy-btn" style="grid-area: up" onclick="setTagPos('top')"><i class="fas fa-chevron-up"></i></div>
+            <div class="joy-btn" style="grid-area: down" onclick="setTagPos('bottom')"><i class="fas fa-chevron-down"></i></div>
+            <div class="joy-btn" style="grid-area: left" onclick="adjTagSize(-2)"><i class="fas fa-minus"></i></div>
+            <div class="joy-btn" style="grid-area: right" onclick="adjTagSize(2)"><i class="fas fa-plus"></i></div>
+            <div class="joy-mid" id="joy-time-btn" onclick="toggleTime()"><i class="fas fa-clock"></i></div>
+        </div>
+    </div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const extImg = document.getElementById('external-img');
+    const tagLayer = document.getElementById('tag-layer');
+    const displayTime = document.getElementById('display-time');
+    const displayText = document.getElementById('display-text');
+    const displayLocation = document.getElementById('display-location');
+    const tagInput = document.getElementById('tag-input');
+    const flashOverlay = document.getElementById('flash-overlay');
+    const locationSelect = document.getElementById('location-select');
+    const lineWidthSelect = document.getElementById('line-width');
+
+    let alertedNoKey = false; 
+
+    let paths = [], currentPath = [], isDrawing = false, isCamStarted = false;
+    let isExternalMode = false, directoryHandle = null;
+    
+    // 로컬 스토리지에 모든 설정 기억 (버전업 v10)
+    let config = JSON.parse(localStorage.getItem('tagCfg_v10')) || { 
+        showTime: true, 
+        pos: 'top', 
+        size: 26, 
+        color: 'red',
+        lineWidth: 6, 
+        locationText: '',
+        locationSelectValue: '',
+        customTagText: ''
+    };
+
+    function initBrowserStatus() {
+        const ua = navigator.userAgent;
+        const isChrome = /Chrome/.test(ua) && /Google Inc/.test(navigator.vendor);
+        const isSamsung = /SamsungBrowser/.test(ua);
+        const isWhale = /Whale/.test(ua);
+        
+        const statusEl = document.getElementById('browser-status');
+        if (isChrome && !isSamsung && !isWhale) {
+            statusEl.innerText = "CHROME";
+            statusEl.className = "status-indicator chrome";
+        } else {
+            statusEl.innerText = isSamsung ? "SAMSUNG" : (isWhale ? "WHALE" : "WEB");
+            statusEl.className = "status-indicator web";
+        }
+    }
+
+    async function startCam() {
+        if (window.stream) window.stream.getTracks().forEach(t => t.stop());
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+            });
+            window.stream = stream; video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                isCamStarted = true;
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                redraw();
+            };
+        } catch (e) { console.log("카메라 초기화 실패"); }
+    }
+
+    function checkStart() { if(!isCamStarted) startCam(); }
+
+    async function setSaveFolder() {
+        if (!window.showDirectoryPicker) return alert("이 기기에서는 폴더 지정을 지원하지 않아 '다운로드' 폴더로 기본 저장됩니다.");
+        try {
+            // picture/pic 디렉토리를 제안 (사용자가 창에서 직접 폴더를 선택해야함)
+            directoryHandle = await window.showDirectoryPicker({
+                id: 'pic_folder',
+                startIn: 'pictures'
+            });
+            alert("저장 폴더가 설정되었습니다.");
+        } catch (e) { console.log("사용자 취소"); }
+    }
+
+    function loadExternalImg(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                extImg.src = e.target.result;
+                extImg.style.display = 'block'; video.style.display = 'none';
+                isExternalMode = true;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function updateClock() {
+        const n = new Date();
+        const week = ['일', '월', '화', '수', '목', '금', '토'];
+        displayTime.innerText = `${n.getFullYear()}.${String(n.getMonth()+1).padStart(2,'0')}.${String(n.getDate()).padStart(2,'0')} ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:${String(n.getSeconds()).padStart(2,'0')} (${week[n.getDay()]})`;
+    }
+    setInterval(updateClock, 1000);
+
+    function getFileTimestamp() {
+        const n = new Date();
+        return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}_${String(n.getHours()).padStart(2,'0')}${String(n.getMinutes()).padStart(2,'0')}${String(n.getSeconds()).padStart(2,'0')}`;
+    }
+
+    // 카카오 API를 활용한 위치 검색 기능 (JavaScript SDK 방식)
+    function changeLocation() {
+        const val = locationSelect.value;
+        config.locationSelectValue = val;
+        
+        if (val.startsWith('gps')) {
+            displayLocation.innerText = "위치 찾는 중...";
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const lat = pos.coords.latitude;
+                        const lng = pos.coords.longitude;
+
+                        // 카카오 JS SDK가 정상적으로 로드되었는지 확인
+                        if (typeof kakao !== 'undefined' && kakao.maps && kakao.maps.services) {
+                            var geocoder = new kakao.maps.services.Geocoder();
+                            
+                            geocoder.coord2Address(lng, lat, function(result, status) {
+                                if (status === kakao.maps.services.Status.OK) {
+                                    let address = "";
+                                    const doc = result[0];
+                                    
+                                    if (val === 'gps_old') {
+                                        // 구주소(지번) 확실하게 추출
+                                        if (doc.address && doc.address.address_name) {
+                                            address = doc.address.address_name;
+                                        } else {
+                                            address = "해당 위치의 지번 주소 없음";
+                                        }
+                                    } else {
+                                        // 신주소(도로명)
+                                        if (doc.road_address && doc.road_address.address_name) {
+                                            address = doc.road_address.address_name;
+                                        } else if (doc.address && doc.address.address_name) {
+                                            address = doc.address.address_name; // 도로명 없으면 지번으로 대체
+                                        } else {
+                                            address = "해당 위치의 도로명 주소 없음";
+                                        }
+                                    }
+                                    
+                                    config.locationText = address;
+                                    displayLocation.innerText = address;
+                                    saveConfig();
+                                } else {
+                                    config.locationText = "API 변환 실패 (오류)";
+                                    displayLocation.innerText = config.locationText;
+                                    saveConfig();
+                                    alert("주소 변환에 실패했습니다.");
+                                }
+                            });
+                        } else {
+                            config.locationText = "API 차단됨 (도메인 미등록)";
+                            displayLocation.innerText = config.locationText;
+                            saveConfig();
+                            
+                            if (!alertedNoKey) {
+                                alert("❌ 카카오 자바스크립트 API가 차단되었습니다.\n\n[원인]\n1. HTML 파일을 그냥 더블클릭해서 열었거나 (file://)\n2. 접속하신 사이트 주소가 카카오 디벨로퍼스(Web 플랫폼)에 등록되지 않았습니다.\n\n정상적인 웹 서버 환경(https://...)에서 실행 후 도메인을 등록해주세요.");
+                                alertedNoKey = true;
+                            }
+                        }
+                    },
+                    (err) => {
+                        alert("위치 정보를 가져올 수 없습니다. 휴대폰의 GPS(위치) 권한을 켜주세요.");
+                        locationSelect.value = "";
+                        config.locationSelectValue = "";
+                        config.locationText = "";
+                        displayLocation.innerText = "";
+                        saveConfig();
+                    }, { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                alert("GPS를 지원하지 않는 기기입니다.");
+                locationSelect.value = "";
+                config.locationSelectValue = "";
+            }
+        } else {
+            config.locationText = "";
+            displayLocation.innerText = "";
+            saveConfig();
+        }
+    }
+
+    async function takeFinalPhoto() {
+        flashOverlay.style.opacity = '1'; setTimeout(() => flashOverlay.style.opacity = '0', 100);
+        
+        const out = document.createElement('canvas');
+        out.width = 720; out.height = 960;
+        const oCtx = out.getContext('2d');
+        const sW = isExternalMode ? extImg.naturalWidth : video.videoWidth;
+        const sH = isExternalMode ? extImg.naturalHeight : video.videoHeight;
+        if (!sW) return;
+        
+        const targetAspect = out.width / out.height;
+        let cW, cH, cX, cY;
+        if (sW / sH > targetAspect) { cW = sH * targetAspect; cH = sH; cX = (sW - cW) / 2; cY = 0; }
+        else { cW = sW; cH = sW / targetAspect; cX = 0; cY = (sH - cH) / 2; }
+
+        oCtx.drawImage(isExternalMode ? extImg : video, cX, cY, cW, cH, 0, 0, out.width, out.height);
+        oCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, out.width, out.height);
+        
+        oCtx.fillStyle = config.color; 
+        oCtx.textAlign = 'right';
+        oCtx.textBaseline = 'top';
+        oCtx.shadowBlur = 5; 
+        oCtx.shadowColor = 'rgba(0,0,0,0.8)';
+        oCtx.shadowOffsetX = 2;
+        oCtx.shadowOffsetY = 2;
+        
+        const pad = 35;
+        const scaleFactor = 1.5;
+        const baseSize = config.size * scaleFactor;
+        
+        let linesToDraw = [];
+        const timeStr = displayTime.innerText;
+        const txtStr = tagInput.value;
+        const locStr = config.locationText;
+
+        // 글자 크기를 모두 baseSize로 통일 (시간은 폰트만 변경)
+        const fontStyle = `bold ${baseSize}px sans-serif`;
+        const fontTimeStyle = `bold ${baseSize}px monospace`;
+
+        if (config.pos === 'top') {
+            if (locStr) linesToDraw.push({text: locStr, font: fontStyle});
+            if (config.showTime) linesToDraw.push({text: timeStr, font: fontTimeStyle});
+            if (txtStr) linesToDraw.push({text: txtStr, font: fontStyle});
+            
+            let currentY = pad;
+            linesToDraw.forEach(line => {
+                oCtx.font = line.font;
+                oCtx.fillText(line.text, out.width - pad, currentY);
+                currentY += baseSize * 1.25; 
+            });
+        } else {
+            if (txtStr) linesToDraw.push({text: txtStr, font: fontStyle});
+            if (config.showTime) linesToDraw.push({text: timeStr, font: fontTimeStyle});
+            if (locStr) linesToDraw.push({text: locStr, font: fontStyle});
+            
+            let totalHeight = linesToDraw.length * (baseSize * 1.25);
+            let currentY = out.height - pad - totalHeight + (baseSize * 0.2);
+            
+            linesToDraw.forEach(line => {
+                oCtx.font = line.font;
+                oCtx.fillText(line.text, out.width - pad, currentY);
+                currentY += baseSize * 1.25;
+            });
+        }
+
+        const fileName = `TAGPIC_${getFileTimestamp()}.jpg`;
+        const dataUrl = out.toDataURL('image/jpeg', 0.9);
+        
+        if (directoryHandle) {
+            try {
+                const blob = await (await fetch(dataUrl)).blob();
+                const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(blob); await writable.close();
+            } catch(e) { download(dataUrl, fileName); }
+        } else {
+            download(dataUrl, fileName);
+        }
+        
+        if(isExternalMode) { extImg.style.display = 'none'; video.style.display = 'block'; isExternalMode = false; }
+    }
+
+    function download(url, name) {
+        const link = document.createElement('a'); link.download = name; link.href = url; link.click();
+    }
+
+    function setGlobalColor(c, el) {
+        config.color = c; tagLayer.style.color = c; saveConfig(); redraw();
+        document.querySelectorAll('.dot').forEach(d => d.classList.remove('selected'));
+        if(el) el.classList.add('selected');
+    }
+
+    function changeLineWidth() {
+        config.lineWidth = parseInt(lineWidthSelect.value);
+        saveConfig();
+    }
+
+    const getXY = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const ev = e.touches ? e.touches[0] : e;
+        return { x: (ev.clientX - rect.left) * (canvas.width / rect.width), y: (ev.clientY - rect.top) * (canvas.height / rect.height) };
+    };
+
+    canvas.addEventListener('touchstart', (e) => { isDrawing = true; currentPath = []; ctx.beginPath(); const p = getXY(e); ctx.moveTo(p.x, p.y); }, {passive: false});
+    canvas.addEventListener('touchmove', (e) => { 
+        if (!isDrawing) return; e.preventDefault(); 
+        const p = getXY(e); ctx.lineTo(p.x, p.y); 
+        ctx.strokeStyle = config.color; 
+        ctx.lineWidth = config.lineWidth; 
+        ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke(); 
+        currentPath.push({x: p.x, y: p.y, c: config.color, w: config.lineWidth}); 
+    }, {passive: false});
+    canvas.addEventListener('touchend', () => { if(isDrawing) paths.push([...currentPath]); isDrawing = false; });
+    
+    canvas.addEventListener('mousedown', (e) => { isDrawing = true; currentPath = []; ctx.beginPath(); const p = getXY(e); ctx.moveTo(p.x, p.y); });
+    canvas.addEventListener('mousemove', (e) => { 
+        if (!isDrawing) return; 
+        const p = getXY(e); ctx.lineTo(p.x, p.y); 
+        ctx.strokeStyle = config.color; 
+        ctx.lineWidth = config.lineWidth; 
+        ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke(); 
+        currentPath.push({x: p.x, y: p.y, c: config.color, w: config.lineWidth}); 
+    });
+    canvas.addEventListener('mouseup', () => { if(isDrawing) paths.push([...currentPath]); isDrawing = false; });
+
+    function updateTagText() { 
+        config.customTagText = tagInput.value;
+        displayText.innerText = tagInput.value; 
+        saveConfig();
+    }
+    
+    function clearTagInput() { 
+        tagInput.value = ''; 
+        config.customTagText = '';
+        updateTagText(); 
+    }
+    
+    function setTagPos(p) { 
+        config.pos = p; 
+        if (p === 'top') {
+            tagLayer.className = 'pos-top';
+            tagLayer.style.justifyContent = 'flex-start';
+        } else {
+            tagLayer.className = 'pos-bottom';
+            tagLayer.style.justifyContent = 'flex-end';
+        }
+        saveConfig(); 
+    }
+
+    function adjTagSize(v) { 
+        config.size = Math.max(16, Math.min(60, config.size + v)); 
+        tagLayer.style.fontSize = config.size + 'px'; 
+        saveConfig(); 
+    }
+
+    function toggleTime() { 
+        config.showTime = !config.showTime; 
+        applyTimeState();
+        saveConfig(); 
+    }
+    
+    function applyTimeState() {
+        displayTime.style.display = config.showTime ? 'block' : 'none'; 
+        const btn = document.getElementById('joy-time-btn');
+        if(config.showTime) btn.classList.add('active');
+        else btn.classList.remove('active');
+    }
+
+    function saveConfig() { localStorage.setItem('tagCfg_v10', JSON.stringify(config)); }
+    function undo() { paths.pop(); redraw(); }
+    function clearDraw() { paths = []; redraw(); }
+    
+    function redraw() { 
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        paths.forEach(path => { 
+            if(!path.length) return; 
+            ctx.beginPath(); 
+            ctx.strokeStyle = path[0].c; 
+            ctx.lineWidth = path[0].w || 6; 
+            ctx.lineCap='round'; 
+            ctx.lineJoin='round'; 
+            ctx.moveTo(path[0].x, path[0].y); 
+            path.forEach(pt => ctx.lineTo(pt.x, pt.y)); 
+            ctx.stroke(); 
+        }); 
+    }
+
+    window.onload = () => {
+        initBrowserStatus(); 
+        startCam(); 
+        updateClock();
+        
+        // 모든 설정 및 상태 복원
+        const initialDot = [...document.querySelectorAll('.dot')].find(d => d.style.backgroundColor === config.color);
+        if(initialDot) setGlobalColor(config.color, initialDot);
+        else setGlobalColor('red', document.querySelector('.dot')); 
+        
+        lineWidthSelect.value = config.lineWidth || 6;
+        setTagPos(config.pos); 
+        tagLayer.style.fontSize = config.size + 'px';
+        applyTimeState();
+        
+        if (config.customTagText) {
+            tagInput.value = config.customTagText;
+            displayText.innerText = config.customTagText;
+        }
+        
+        if (config.locationSelectValue) {
+            locationSelect.value = config.locationSelectValue;
+        }
+        if (config.locationText) {
+            displayLocation.innerText = config.locationText;
+        }
+    };
+</script>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script>
+    // =========================================================
+    // 1. 실시간 데이터 동기화 세팅 (파이어베이스)
+    // =========================================================
+    const firebaseConfigSync = {
+        apiKey: "AIzaSyCM-XlgUaZxIzuAVUJSb3LEVGwWM1GPlkw",
+        databaseURL: "https://my-dash-b9471-default-rtdb.asia-southeast1.firebasedatabase.app/",
+        projectId: "my-dash-b9471"
+    };
+    
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfigSync);
+    }
+    const dbSync = firebase.database();
+
+    // 🚨 카메라 태그 텍스트 동기화용 방 이름 (필요시 변경)
+    const syncRef = dbSync.ref('app_data/tag_camera'); 
+
+    // 태그 입력창을 타겟으로 잡음
+    const targetElement = document.getElementById('tag-input'); 
+
+    if(targetElement) {
+        // [내 화면 -> 서버] 내가 글자를 입력할 때
+        targetElement.addEventListener('input', (e) => {
+            syncRef.set(e.target.value);
+            // 직접 입력 시 로컬 스토리지도 함께 업데이트
+            if(typeof config !== 'undefined') {
+                config.customTagText = e.target.value;
+                document.getElementById('display-text').innerText = e.target.value;
+                localStorage.setItem('tagCfg_v10', JSON.stringify(config));
+            }
+        });
+
+        // [서버 -> 내 화면] 모바일/PC에서 내용이 바뀌었을 때
+        syncRef.on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val !== null && targetElement.value !== val) {
+                targetElement.value = val;
+                // 외부 데이터가 들어올 때 화면 및 로컬 상태도 함께 업데이트
+                if(typeof config !== 'undefined') {
+                    config.customTagText = val;
+                    document.getElementById('display-text').innerText = val;
+                    localStorage.setItem('tagCfg_v10', JSON.stringify(config));
+                }
+            }
+        });
+    }
+
+    // =========================================================
+    // 2. Hybrid OS 연동: 앱 위에서 스와이프 시 페이지 넘김
+    // =========================================================
+    let _os_sX = 0, _os_sY = 0, _os_isSwipe = false;
+    
+    document.addEventListener('touchstart', e => { 
+        _os_sX = e.touches[0].clientX; 
+        _os_sY = e.touches[0].clientY; 
+        _os_isSwipe = true;
+    }, {passive: true});
+    
+    document.addEventListener('touchmove', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.touches[0].clientX - _os_sX;
+        let dy = e.touches[0].clientY - _os_sY;
+        
+        // 🚨 캔버스(그림 그리기) 영역에서 움직이거나 세로 스크롤일 때는 스와이프 페이지 넘김 취소
+        if(e.target.id === 'canvas' || Math.abs(dy) > Math.abs(dx)) {
+            _os_isSwipe = false; 
+        }
+    }, {passive: true});
+    
+    document.addEventListener('touchend', e => {
+        if(!_os_isSwipe) return;
+        let dx = e.changedTouches[0].clientX - _os_sX;
+        // 좌우로 50px 이상 쓸어 넘겼을 때 바탕화면(OS)으로 신호 전송
+        if (Math.abs(dx) > 50) {
+            window.parent.postMessage({ type: 'os_swipe', dir: dx < 0 ? 'left' : 'right' }, '*');
+        }
+    });
+
+    // 💡 수정한 부분: 맨 밑에 있던 테스트용 알림창을 지웠습니다!
+
+</script>
+</body>
+</html>
+
