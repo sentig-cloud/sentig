@@ -270,59 +270,68 @@
         return `${n.getFullYear()}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}_${String(n.getHours()).padStart(2,'0')}${String(n.getMinutes()).padStart(2,'0')}${String(n.getSeconds()).padStart(2,'0')}`;
     }
 
-    // 카카오 API를 활용한 위치 검색 기능 (JavaScript SDK 방식)
-    // 구글 API를 활용한 상세 주소(지번 포함) 검색 기능
-    async function changeLocation() {
-        const val = locationSelect.value;
-        config.locationSelectValue = val;
+async function changeLocation() {
+    const val = locationSelect.value;
+    config.locationSelectValue = val;
+    
+    if (val !== "") {
+        displayLocation.innerText = "네이버 주소 분석 중...";
         
-        if (val !== "") {
-            displayLocation.innerText = "구글 주소 분석 중...";
-            
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lng = pos.coords.longitude;
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
 
-                    // 💡 인님이 발급받은 구글 API 키를 여기에 넣으세요!
-                    const GOOGLE_KEY = "AIzaSyByAPwFZHQLvqtlIhmDhWgJkib3GokD84k";
-                    
-                    // 구글 지오코딩 호출 (언어는 한국어 설정)
-                    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}&language=ko`;
+                // 💡 네이버에서 복사한 Client ID를 여기에 넣으세요!
+                const NAVER_CLIENT_ID = "ECfWcR644SevlgETXo5Zr3OIuYNsK2m3eTysyrKO";
+                
+                // 네이버 API 호출 (Reverse Geocoding)
+                // CORS 문제를 피하기 위해 네이버 가이드에 따라 요청을 구성합니다.
+                const url = `https://naveropenapi.apigw.ntruss.com/map-reversegeocode/v2/gc?coords=${lng},${lat}&output=json&orders=addr,roadaddr`;
 
-                    try {
-                        const response = await fetch(url);
-                        const data = await response.json();
-
-                        if (data.status === "OK") {
-                            // 구글은 'formatted_address'에 지번/건물번호가 포함된 전체 주소를 줍니다.
-                            let fullAddress = data.results[0].formatted_address;
-                            
-                            // "대한민국 " 글자는 가독성을 위해 삭제
-                            let cleanAddress = fullAddress.replace("대한민국 ", "");
-
-                            config.locationText = cleanAddress;
-                            displayLocation.innerText = cleanAddress;
-                            saveConfig();
-                        } else if (data.status === "REQUEST_DENIED") {
-                            alert("구글 키 오류: Geocoding API가 활성화되었는지 확인해주세요.");
-                        } else {
-                            displayLocation.innerText = "주소 찾기 실패: " + data.status;
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'X-NCP-APIGW-API-KEY-ID': NAVER_CLIENT_ID
                         }
-                    } catch (e) {
-                        displayLocation.innerText = "구글 서버 연결 실패";
+                    });
+                    const data = await response.json();
+
+                    if (data.status.code === 0 && data.results.length > 0) {
+                        const res = data.results[0];
+                        const region = res.region;
+                        const land = res.land;
+                        
+                        // 지번 주소 예쁘게 만들기 (거창군 ... 몇 번지)
+                        let addr = `${region.area1.name} ${region.area2.name} ${region.area3.name}`;
+                        if (land.number1) {
+                            addr += ` ${land.number1}`;
+                            if (land.number2) addr += `-${land.number2}`;
+                        }
+
+                        config.locationText = addr;
+                        displayLocation.innerText = addr;
+                        saveConfig();
+                    } else {
+                        displayLocation.innerText = "주소를 찾을 수 없습니다.";
                     }
-                }, (err) => {
-                    alert("GPS 권한을 허용해 주세요!");
-                    locationSelect.value = "";
-                }, { enableHighAccuracy: true, timeout: 10000 });
-            }
-        } else {
-            config.locationText = "";
-            displayLocation.innerText = "";
-            saveConfig();
+                } catch (e) {
+                    displayLocation.innerText = "네이버 연결 실패";
+                    console.error(e);
+                }
+            }, (err) => {
+                alert("GPS를 허용해 주셔야 주소를 가져올 수 있습니다!");
+                displayLocation.innerText = "GPS 오류";
+            }, { enableHighAccuracy: true });
         }
+    } else {
+        config.locationText = "";
+        displayLocation.innerText = "";
+        saveConfig();
     }
+}
+    
     async function takeFinalPhoto() {
         flashOverlay.style.opacity = '1'; setTimeout(() => flashOverlay.style.opacity = '0', 100);
         
@@ -625,6 +634,7 @@
 </script>
 </body>
 </html>
+
 
 
 
