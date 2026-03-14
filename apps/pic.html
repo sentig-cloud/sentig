@@ -96,7 +96,6 @@
 
         #flash-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; opacity:0; pointer-events:none; z-index:100; transition: opacity 0.1s; }
     </style>
-  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=46b443e0e7fe55d6820a3d764fdfdf7c&libraries=services"></script>
     <body onclick="checkStart()">
 
     <div class="top-panel">
@@ -272,79 +271,51 @@
     }
 
     // 카카오 API를 활용한 위치 검색 기능 (JavaScript SDK 방식)
-    function changeLocation() {
+    // 구글 API를 활용한 상세 주소(지번 포함) 검색 기능
+    async function changeLocation() {
         const val = locationSelect.value;
         config.locationSelectValue = val;
         
-        if (val.startsWith('gps')) {
-            displayLocation.innerText = "위치 찾는 중...";
+        if (val !== "") {
+            displayLocation.innerText = "구글 주소 분석 중...";
+            
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        const lat = pos.coords.latitude;
-                        const lng = pos.coords.longitude;
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
 
-                        // 카카오 JS SDK가 정상적으로 로드되었는지 확인
-                        if (typeof kakao !== 'undefined' && kakao.maps && kakao.maps.services) {
-                            var geocoder = new kakao.maps.services.Geocoder();
+                    // 💡 인님이 발급받은 구글 API 키를 여기에 넣으세요!
+                    const GOOGLE_KEY = "AIzaSyAEufffDkk42YcqAFG4s4lUvei7-XKZAW8";
+                    
+                    // 구글 지오코딩 호출 (언어는 한국어 설정)
+                    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_KEY}&language=ko`;
+
+                    try {
+                        const response = await fetch(url);
+                        const data = await response.json();
+
+                        if (data.status === "OK") {
+                            // 구글은 'formatted_address'에 지번/건물번호가 포함된 전체 주소를 줍니다.
+                            let fullAddress = data.results[0].formatted_address;
                             
-                            geocoder.coord2Address(lng, lat, function(result, status) {
-                                if (status === kakao.maps.services.Status.OK) {
-                                    let address = "";
-                                    const doc = result[0];
-                                    
-                                    if (val === 'gps_old') {
-                                        // 구주소(지번) 확실하게 추출
-                                        if (doc.address && doc.address.address_name) {
-                                            address = doc.address.address_name;
-                                        } else {
-                                            address = "해당 위치의 지번 주소 없음";
-                                        }
-                                    } else {
-                                        // 신주소(도로명)
-                                        if (doc.road_address && doc.road_address.address_name) {
-                                            address = doc.road_address.address_name;
-                                        } else if (doc.address && doc.address.address_name) {
-                                            address = doc.address.address_name; // 도로명 없으면 지번으로 대체
-                                        } else {
-                                            address = "해당 위치의 도로명 주소 없음";
-                                        }
-                                    }
-                                    
-                                    config.locationText = address;
-                                    displayLocation.innerText = address;
-                                    saveConfig();
-                                } else {
-                                    config.locationText = "API 변환 실패 (오류)";
-                                    displayLocation.innerText = config.locationText;
-                                    saveConfig();
-                                    alert("주소 변환에 실패했습니다.");
-                                }
-                            });
-                        } else {
-                            config.locationText = "API 차단됨 (도메인 미등록)";
-                            displayLocation.innerText = config.locationText;
+                            // "대한민국 " 글자는 가독성을 위해 삭제
+                            let cleanAddress = fullAddress.replace("대한민국 ", "");
+
+                            config.locationText = cleanAddress;
+                            displayLocation.innerText = cleanAddress;
                             saveConfig();
-                            
-                            if (!alertedNoKey) {
-                                alert("❌ 카카오 자바스크립트 API가 차단되었습니다.\n\n[원인]\n1. HTML 파일을 그냥 더블클릭해서 열었거나 (file://)\n2. 접속하신 사이트 주소가 카카오 디벨로퍼스(Web 플랫폼)에 등록되지 않았습니다.\n\n정상적인 웹 서버 환경(https://...)에서 실행 후 도메인을 등록해주세요.");
-                                alertedNoKey = true;
-                            }
+                        } else if (data.status === "REQUEST_DENIED") {
+                            alert("구글 키 오류: Geocoding API가 활성화되었는지 확인해주세요.");
+                        } else {
+                            displayLocation.innerText = "주소 찾기 실패: " + data.status;
                         }
-                    },
-                    (err) => {
-                        alert("위치 정보를 가져올 수 없습니다. 휴대폰의 GPS(위치) 권한을 켜주세요.");
-                        locationSelect.value = "";
-                        config.locationSelectValue = "";
-                        config.locationText = "";
-                        displayLocation.innerText = "";
-                        saveConfig();
-                    }, { enableHighAccuracy: true, timeout: 5000 }
-                );
-            } else {
-                alert("GPS를 지원하지 않는 기기입니다.");
-                locationSelect.value = "";
-                config.locationSelectValue = "";
+                    } catch (e) {
+                        displayLocation.innerText = "구글 서버 연결 실패";
+                    }
+                }, (err) => {
+                    alert("GPS 권한을 허용해 주세요!");
+                    locationSelect.value = "";
+                }, { enableHighAccuracy: true, timeout: 10000 });
             }
         } else {
             config.locationText = "";
@@ -352,7 +323,6 @@
             saveConfig();
         }
     }
-
     async function takeFinalPhoto() {
         flashOverlay.style.opacity = '1'; setTimeout(() => flashOverlay.style.opacity = '0', 100);
         
@@ -655,5 +625,6 @@
 </script>
 </body>
 </html>
+
 
 
